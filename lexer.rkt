@@ -13,7 +13,7 @@
   (punct? (:or (char-set "(){}[];:\"'.,") "=>"))
   ;; literal abbreviations
   (address? (:seq "0x" (:= 40 (:or (:/ #\a #\f) (:/ #\A #\F) numeric))))
-   )
+  )
   
 (define-tokens common-tokens (IDENTIFIER OPERATOR NUMBER))
 (define-empty-tokens keyword-tokens (MFN SFN MAP FILTER REDUCE))
@@ -69,23 +69,19 @@
    [whitespace? (return-without-pos (streamline-lexer input-port))] ;remove whitespace
    [keyword? ((string->keyword-token lexeme))]
    [identifier? (token-IDENTIFIER lexeme)]
-   [operator? (token-OPERATOR ((string->operator lexeme)))]
+   [operator? ((string->operator lexeme))]
    [address? (token-NUMBER lexeme)]
    [num? (token-NUMBER lexeme)]
    [punct? ((string->punct lexeme))]))
 
 (define (tokenize port)
+  (port-count-lines! port)
   (let ([token (streamline-lexer port)])
-    (unless (equal? 'EOF token)
+    (if (equal? 'EOF token)
+        '()
         (cons token (tokenize port)))))
 
-(tokenize (open-input-string "
-
-mfn burns = erc721Transfers
-    |> filter (transfer) => transfer.address == asdfasdfasdf;
-    |> map (transfer) => { burner: transfer.from, token: transfer.tokenId };
-
-
-"))
-
-(provide tokenize)
+(define tokenized-input (tokenize (open-input-file "./examples/erc721.strm"
+                                                   )))
+tokenized-input
+(provide tokenize tokenized-input)
