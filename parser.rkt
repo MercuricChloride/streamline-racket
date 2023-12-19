@@ -39,13 +39,13 @@
 
 (define lambda/p
   (do (token/p 'LPAREN)
-      [fn-args <- (many/p (token/p 'IDENTIFIER) #:min 1 #:sep (token/p 'COMMA))]
+      [fn-args <- (many/p ident/p #:min 1 #:sep (token/p 'COMMA))]
       (token/p 'RPAREN)
       (token/p 'FAT-ARROW)
       [exprs <- expression/p]
-      (pure `(lambda (fn-args ,@fn-args) (expressions ,exprs)))))
+      (pure `(lambda (fn-args . ,fn-args) ,exprs))))
 
-(define map/p (do (token/p 'MAP) [callback <- lambda/p] (pure `(map ,@callback))))
+(define map/p (do (token/p 'MAP) [callback <- lambda/p] (pure `(map ,callback))))
 
 (define filter/p (do (token/p 'FILTER) [callback <- lambda/p] (pure `(filter ,@callback))))
 
@@ -70,6 +70,7 @@
       (pure (list 'mfn name input pipeline))))
 
 (define module-def/p (or/p mfn/p sfn/p))
+
 ;; TODO Update this with an actual parser
 ;(define interface/p void/p)
 

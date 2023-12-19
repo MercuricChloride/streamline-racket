@@ -48,39 +48,65 @@
 (define (identifier? node)
   (eq? (car node) 'identifier))
 
+(define (pipeline? node)
+  (eq? (car node) 'pipeline))
+
+(define (lambda? node)
+  (eq? (car node) 'lambda))
+
+(define (map? node)
+  (eq? (car node) 'map))
+
+(define (fn-args? node)
+  (eq? (car node) 'fn-args))
+
 (define (generate-expression node)
   (match (car node)
-    ['identifier (symbol->string (cdr node))]
-    ['rpc-call (map (lambda (node) (generate-expression (cdr node))) (cdr node))]
-    ['field-access (map generate-expression (cdr node))]))
+    ['rpc-call (list (rust/g (cadr node)) "ARGS NOT DONE YET")]
+    ['field-access (list (rust/g (cadr node)) (rust/g (caddr node)))]))
 
-;; (define (generate-lambda node)
-;;   (let* []))
+(define (generate-pipeline input-node)
+  (map rust/g (cdr input-node)))
+
+(define (generate-lambda input-node)
+  (map rust/g (cdr input-node)))
+
+(define (generate-map input-node)
+  `(map ,(rust/g (cadr input-node))))
 
 (define (generate-identifier node)
   (if (pair? (cdr node))
       (raise-argument-error "CDR OF THE IDENTIFIER NODE IS NOT A SYMBOL,IT'S A PAIR!")
       (symbol->string (cdr node))))
 
+(define (generate-fn-args node)
+  (map rust/g (cdr node)))
+
 (define (generate-module node)
   ;; we are mapping over the caddr of the node
   (let* ([fn-parts (cdr node)]
          [name (cdr (assoc 'name fn-parts))]
          [inputs (cdr (assoc 'input fn-parts))]
-         [pipeline (cdr (assoc 'pipeline fn-parts))])
+         [pipeline (assoc 'pipeline fn-parts)])
     (map rust/g (list name inputs pipeline))))
 
 (define (rust/g node)
   (cond
-    [(fn-body? node) (generate-expression (cdr node))]
-
     [(identifier? node) (generate-identifier node)]
+
+    [(fn-args? node) (generate-fn-args node)]
 
     [(expression? node) (generate-expression node)]
 
+    [(map? node) (generate-map node)]
+
+    [(pipeline? node) (generate-pipeline node)]
+
+    [(lambda? node) (generate-lambda node)]
+
     [(module? node) (generate-module node)]
 
-    [else (raise (format "UNKNOWN NODE! ~a" node))]))
+    [else (error (format "UNKNOWN NODE! ~a" node))]))
 
 (define (compile ast)
   (for/fold ([acc rust-imports]) ([node ast])
