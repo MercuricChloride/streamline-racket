@@ -18,21 +18,6 @@
    }"
    input))
 
-;; (define test-context
-;;   (list "fn-name"
-;;         "test_module"
-;;         "inputs"
-;;         (map fn-inputs (list (hash "idehnt" "a" "type" "address")))
-;;         ","
-;;         "expression"
-;;         "6 + 9"))
-
-;; (define test-output (fn-template test-context))
-;; (pretty-display test-output)
-
-;(expand-string "{{a}} {{b}}" (make-hash (list '("a" . "123") '("b" . "456"))))
-;(pretty-display (include-template "templates/rust-helpers.rs"))
-
 (define module-symbols '(mfn sfn))
 (define expression-symbols '(boolean identifier field-access rpc-call))
 
@@ -72,7 +57,7 @@
   (map rust/g (cdr input-node)))
 
 (define (generate-map input-node)
-  `(map ,(rust/g (cadr input-node))))
+  `(map ,(rust/g (car input-node))))
 
 (define (generate-identifier node)
   (if (pair? (cdr node))
