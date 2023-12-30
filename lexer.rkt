@@ -4,7 +4,7 @@
 
 (define-lex-abbrevs
  (whitespace? whitespace)
- (keyword? (:or "map" "filter" "reduce" "mfn" "sfn" "fn" "true" "false"))
+ (keyword? (:or "map" "filter" "reduce" "mfn" "sfn" "fn" "true" "false" "source"))
  (identifier? (:seq alphabetic (:* (:or alphabetic numeric))))
  ;TODO Fix operator precedence
  (operator? (:or "+" "-" "*" "/" "==" "!=" "<" ">" "<=" ">=" "&&" "||" "!" "|>" "="))
@@ -12,11 +12,11 @@
  ;; literal abbreviations
  (address? (:seq "0x" (:= 40 (:or (:/ #\a #\f) (:/ #\A #\F) numeric))))
  (num? (:+ numeric))
- (str? (:or (:seq "\"" (:* any-char) "\"") (:seq "'" (:* any-char) "'")))
+ (str? (:or (:seq "\"" (:* (:~ "\"")) "\"") (:seq "'" (:* (:~ "'")) "'")))
  (boolean? (:or "true" "false")))
 
 (define-tokens common-tokens (IDENTIFIER OPERATOR NUMBER ADDRESS STRING))
-(define-empty-tokens keyword-tokens (MFN SFN MAP FILTER REDUCE TRUE FALSE))
+(define-empty-tokens keyword-tokens (MFN SFN MAP FILTER REDUCE TRUE FALSE SOURCE))
 (define-empty-tokens operator-tokens
                      (PLUS MINUS MUL DIV EQ NOT-EQ LT GT LTE GTE AND OR NOT PIPE ASSIGNMENT))
 (define-empty-tokens punct-tokens
@@ -77,7 +77,8 @@
     ["filter" token-FILTER]
     ["reduce" token-REDUCE]
     ["true" token-TRUE]
-    ["false" token-FALSE]))
+    ["false" token-FALSE]
+    ["source" token-SOURCE]))
 
 (define (string->string-token str)
   (let ([replacement (if (string-prefix? str "\"") "\"" "'")]) (string-replace str replacement "")))

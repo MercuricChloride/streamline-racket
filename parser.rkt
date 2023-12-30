@@ -6,8 +6,8 @@
          data/functor
          data/applicative
          "./lexer.rkt")
-;; EXPRESSIONS
 
+;; EXPRESSIONS
 (define true/p (do (token/p 'TRUE) (pure `(boolean ,#t))))
 (define false/p (do (token/p 'FALSE) (pure `(boolean ,#f))))
 (define string-literal/p (do (str <- (token/p 'STRING)) (pure `(string-literal ,str))))
@@ -67,9 +67,10 @@
 
 (define filter/p (do (token/p 'FILTER) [callback <- lambda/p] (pure `(filter ,callback))))
 
-(define functor/p (do (token/p 'PIPE) [f <- (or/p map/p filter/p lambda/p)] (token/p 'SEMI) (pure f)))
+(define functor/p (do (token/p 'PIPE) [f <- (or/p map/p filter/p lambda/p)] (pure f)))
 
-(define pipeline/p (do [applications <- (many/p functor/p #:min 1)] (pure applications)))
+(define pipeline/p
+  (do [applications <- (many/p functor/p #:min 1 #:sep (token/p 'SEMI))] (pure applications)))
 
 (define mfn/p
   (do (token/p 'MFN)
@@ -89,6 +90,14 @@
 
 (define module-def/p (or/p mfn/p sfn/p))
 
+(define source-def/p
+  (do (token/p 'SOURCE)
+      (name <- ident/p)
+      (token/p 'ASSIGNMENT)
+      (path <- (token/p 'STRING))
+      (token/p 'SEMI)
+      (pure `(source ,name ,path))))
+
 (define instance-def/p
   (do (name <- ident/p)
       (token/p 'ASSIGNMENT)
@@ -99,9 +108,11 @@
       (token/p 'SEMI)
       (pure `(instance ,name ,abi-type ,address))))
 
-(define streamline/p (do [cells <- (many/p (or/p module-def/p instance-def/p))] (pure cells)))
+(define streamline/p
+  (do [cells <- (many/p (or/p module-def/p source-def/p instance-def/p))] (pure cells)))
 
 (define parser-result (parse-result! (parse-tokens streamline/p tokenized-input)))
+
 parser-result
 
 (provide parser-result)
