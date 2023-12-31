@@ -6,6 +6,7 @@
 (require "./parser.rkt")
 
 (define-syntax-rule (gen proc args ...) (apply proc (map generate-code (list args ...))))
+
 ;; Data for generating contract source code
 (struct source-data (sol-macro name events))
 
@@ -118,7 +119,7 @@ fn {{name}}({{inputs}}) -> prost_wkt_types::Struct {
     [(identifier name) (gen symbol->string name)]
     [(mfn name inputs body) (gen mfn/gen name inputs body)]
     [(sfn name inputs body) (gen sfn/gen name inputs body)]
-    [(pipeline functors) "todo!()"]
+    [(pipeline functors) (format "~a" functors)]
     [(? string?) node]
     [(? number?) node]
     [(list item ...)
