@@ -38,20 +38,20 @@ loose_sol! {
 (define (get-events/gen event-name abi address)
   (expand-string
    "
-    \"{{event-name}}\"; {{abi}}::{{event-name}}::get_events(&blk, &[\"{{address}}\"])
+    \"{{event-name}}\"; {{abi}}::{{event-name}}::get_events(&blk, &[&address!(\"{{address}}\")])
 "
-   (hash "event-name" event-name "abi" abi "address" address)))
+   (hash "event-name" event-name "abi" abi "address" (string-downcase (substring address 2)))))
 
 (define (instance-def/gen name identifier address)
   (expand-string
    "
         map_insert!(\"{{name}}\",
                     map_literal! {
-                        \"Transfer\"; {{identifier}}::Transfer::get_events(&blk, &[\"{{address}}\"])
+                        \"Transfer\"; {{identifier}}::Transfer::get_events(&blk, &[address!(\"{{address}}\")])
                     },
                     output_map);
 "
-   (hash "name" name "identifier" identifier "address" address)))
+   (hash "name" name "identifier" identifier "address" "asfd")))
 
 (define (sources parser-result)
   (filter (lambda (item) (eq? (first item) 'source)) parser-result))
@@ -161,31 +161,39 @@ fn {{name}}({{inputs}}) -> prost_wkt_types::Struct {
   ; Creates a hash map from an abi instance -> all of the event names
   (define source-hash (make-hash (map (lambda (item) (rest item)) source-defs)))
 
-  (println source-hash)
   (define (instance-events instance)
     (match-let ([(instance-def name abi address) instance])
       (let* ([events (hash-ref source-hash abi)]
-             [_ (println events)]
              [event-getters (map (lambda (event-name) (get-events/gen event-name abi address))
                                  events)])
-        (list name (string-join event-getters)))))
+        (list name (string-join event-getters ",")))))
 
   ; generate the code for the instances
   (define instances-def-code
-    (let ([instance-events (map instance-events contract-instances)])
-      (map
-       (lambda (instance)
-         (let ([name (first instance)] [events (rest instance)])
-           (expand-string
-            "
+    (format
+     "
+#[substreams::handlers::map]
+fn map_events(blk: eth::Block) -> prost_wkt_types::Struct {
+  with_map!{output_map,
+  ~a
+  }
+}
+"
+     (string-join
+      (let ([instance-events (map instance-events contract-instances)])
+        (map
+         (lambda (instance)
+           (let ([name (first instance)] [events (rest instance)])
+             (expand-string
+              "
         map_insert!(\"{{name}}\",
                     map_literal! {
-{{instance-events}}
+{{{instance-events}}}
                     },
                     output_map);
 "
-            (hash "name" name "instance-events" events))))
-       instance-events)))
+              (hash "name" name "instance-events" (string-join events)))))
+         instance-events)))))
 
   ; generate  the code for the source defs
   (define source-def-code (string-join (map first source-defs)))
