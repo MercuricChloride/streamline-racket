@@ -109,6 +109,13 @@ fn {{name}}({{inputs}}) -> prost_wkt_types::Struct {
 "
    (hash "name" name "inputs" -inputs "format-inputs" format-inputs "body" body)))
 
+(define (lam/gen fn-args exprs)
+  (define -args (string-join (map (lambda (arg) (format "~a: ValueMap" arg)) fn-args) ","))
+  (expand-string "
+let output_map = (|{{args}}| { {{exprs}} })(output_map);
+"
+                 (hash "args" -args "exprs" exprs)))
+
 (define (write-string-to-file string filename)
   (with-output-to-file filename (lambda () (display string)) #:exists 'replace))
 
@@ -119,12 +126,15 @@ fn {{name}}({{inputs}}) -> prost_wkt_types::Struct {
     [(identifier name) (gen symbol->string name)]
     [(mfn name inputs body) (gen mfn/gen name inputs body)]
     [(sfn name inputs body) (gen sfn/gen name inputs body)]
-    [(pipeline functors) (format "~a" functors)]
+    [(lam fn-args exprs) (gen lam/gen fn-args exprs)]
+    [(pipeline functors) (string-join (map generate-code functors) "\n")]
+    [(field-access lh rh) (gen (lambda (lh rh) (format "map_access!(~a . ~a)" lh rh)) lh rh)]
     [(? string?) node]
     [(? number?) node]
     [(list item ...)
      (string? item)
-     node]))
+     node]
+    [_ ""]))
 
 (define (generate-streamline-file path)
   ; open a port to the source

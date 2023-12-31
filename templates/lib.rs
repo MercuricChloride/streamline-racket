@@ -25,4 +25,6 @@ use substreams_alloy_helpers::{
     format_inputs, loose_sol, map_access, map_insert, map_literal, prelude::*, to_map, with_map,
 };
 
+type ValueMap = serde_json::Map<String, Value>;
+
 include!("/tmp/streamline.rs");

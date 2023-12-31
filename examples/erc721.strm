@@ -4,7 +4,7 @@ bayc = ERC721(0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D);
 milady = ERC721(0x5Af0D9827E0c53E4799BB226655A1de152A425a5);
 
 mfn burns = mapEvents
-    |> (events) => events.bayc.transfer;
+    |> (events) => events.bayc.Transfer;
     |> map (transfer) => transfer.tokenId;
     |> map (id) => {
                 ownerOf: #bayc.ownerOf(id: uint)#,
