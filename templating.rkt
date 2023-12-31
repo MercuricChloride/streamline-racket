@@ -2,9 +2,12 @@
 
 (require json)
 (require dali)
+(require "./lexer.rkt")
 (require "./parser.rkt")
 
-(define rust-imports "use substreams::fuck::you;\n\n\n")
+(define-syntax-rule (gen proc args ...) (apply proc (map generate-code (list args ...))))
+;; Data for generating contract source code
+(struct source-data (sol-macro name events))
 
 (define (fn-inputs input)
   (expand-string "{{#inputs}} {{ident}}: {{type}} {{/inputs}}" input))
@@ -18,93 +21,188 @@
    }"
    input))
 
-(define module-symbols '(mfn sfn))
-(define expression-symbols '(boolean identifier field-access rpc-call))
+(define-syntax-rule (source path)
+  (let* ([source-code (port->string (open-input-file path))]
+         [events
+          (regexp-match* #rx"event ([a-zA-Z$_][a-zA-Z0-9$_]*)" source-code #:match-select cadr)]
+         [name (regexp-match* #rx"(?:interface|contract) ([a-zA-Z$_][a-zA-Z0-9$_]*)"
+                              source-code
+                              #:match-select cadr)]
+         [sol-macro (expand-string "
+loose_sol! {
+  {{solidity}}
+}
+" (hash "solidity" source-code))])
+    (contract-instance sol-macro name events)))
 
-(define (module? node)
-  (memq (car node) module-symbols))
+(define (get-events/gen event-name abi address)
+  (expand-string
+   "
+    \"{{event-name}}\"; {{abi}}::{{event-name}}::get_events(&blk, &[\"{{address}}\"])
+"
+   (hash "event-name" event-name "abi" abi "address" address)))
 
-(define (expression? node)
-  (memq (car node) expression-symbols))
+(define (instance-def/gen name identifier address)
+  (expand-string
+   "
+        map_insert!(\"{{name}}\",
+                    map_literal! {
+                        \"Transfer\"; {{identifier}}::Transfer::get_events(&blk, &[\"{{address}}\"])
+                    },
+                    output_map);
+"
+   (hash "name" name "identifier" identifier "address" address)))
 
-(define (fn-body? node)
-  (eq? (car node) 'expression))
+(define (sources parser-result)
+  (filter (lambda (item) (eq? (first item) 'source)) parser-result))
 
-(define (identifier? node)
-  (eq? (car node) 'identifier))
+(define (instances parser-result)
+  (filter (lambda (item) (eq? (first item) 'instance)) parser-result))
 
-(define (pipeline? node)
-  (eq? (car node) 'pipeline))
+(define-namespace-anchor a)
+(define ns (namespace-anchor->namespace a))
 
-(define (lambda? node)
-  (eq? (car node) 'lambda))
+(define (source-def/gen path)
+  (let* ([source-code (port->string (open-input-file path))]
+         [events
+          (regexp-match* #rx"event ([a-zA-Z$_][a-zA-Z0-9$_]*)" source-code #:match-select cadr)]
+         [name (regexp-match* #rx"(?:interface|contract) ([a-zA-Z$_][a-zA-Z0-9$_]*)"
+                              source-code
+                              #:match-select cadr)]
+         [sol-macro (expand-string "
+loose_sol! {
+  {{solidity}}
+}
+" (hash "solidity" source-code))])
+    (source-data sol-macro (first name) (flatten events))))
 
-(define (map? node)
-  (eq? (car node) 'map))
+(define (mfn/gen name inputs body)
+  (define -inputs
+    (string-join (map (lambda (input) (format "~a: prost_wkt_types::Struct" input)) inputs) ","))
+  (define format-inputs (format "format_inputs!(~a);" (string-join inputs ",")))
+  (expand-string
+   "
+#[substreams::handlers::map]
+fn {{name}}({{inputs}}) -> prost_wkt_types::Struct {
+    {{format-inputs}}
+    with_map! {output_map,
+      {{body}}
+   }
+}
+"
+   (hash "name" name "inputs" -inputs "format-inputs" format-inputs "body" body)))
 
-(define (fn-args? node)
-  (eq? (car node) 'fn-args))
+(define (sfn/gen name inputs body)
+  (define -inputs
+    (string-join (map (lambda (input) (format "~a: prost_wkt_types::Struct" input)) inputs) ","))
+  (define format-inputs (format "format_inputs!(~a);" (string-join inputs ",")))
+  (expand-string
+   "
+#[substreams::handlers::map]
+fn {{name}}({{inputs}}) -> prost_wkt_types::Struct {
+    {{format-inputs}}
+    with_map! {output_map,
+      {{body}}
+   }
+}
+"
+   (hash "name" name "inputs" -inputs "format-inputs" format-inputs "body" body)))
 
-(define (generate-expression node)
-  (match (car node)
-    ['rpc-call (list (rust/g (cadr node)) "ARGS NOT DONE YET")]
-    ['field-access (list (rust/g (cadr node)) (rust/g (caddr node)))]))
+(define (write-string-to-file string filename)
+  (with-output-to-file filename (lambda () (display string)) #:exists 'replace))
 
-(define (generate-pipeline input-node)
-  (map rust/g (cdr input-node)))
+(define (generate-code node)
+  (match node
+    [(source-def path) (gen source-def/gen path)]
+    [(instance-def name identifier address) (gen instance-def/gen name identifier address)]
+    [(identifier name) (gen symbol->string name)]
+    [(mfn name inputs body) (gen mfn/gen name inputs body)]
+    [(sfn name inputs body) (gen sfn/gen name inputs body)]
+    [(pipeline functors) "todo!()"]
+    [(? string?) node]
+    [(? number?) node]
+    [(list item ...)
+     (string? item)
+     node]))
 
-(define (generate-lambda input-node)
-  (map rust/g (cdr input-node)))
+(define (generate-streamline-file path)
+  ; open a port to the source
+  (define source-port (open-input-file path))
+  (println "Opened source port")
 
-(define (generate-map input-node)
-  `(map ,(rust/g (car input-node))))
+  ; lex the file
+  (define tokenized-input (tokenize source-port))
+  (println "Tokenized Input")
 
-(define (generate-identifier node)
-  (if (pair? (cdr node))
-      (raise-argument-error "CDR OF THE IDENTIFIER NODE IS NOT A SYMBOL,IT'S A PAIR!")
-      (symbol->string (cdr node))))
+  ; parse the file
+  (define parsed-input (parse-file! tokenized-input))
+  (println "Parsed Input")
 
-(define (generate-fn-args node)
-  (map rust/g (cdr node)))
+  ; gather the instances
+  (define contract-instances
+    (filter (lambda (node)
+              (match node
+                [(instance-def _ _ _) true]
+                [_ false]))
+            parsed-input))
+  (println "Got Contract Instances")
 
-(define (generate-module node)
-  ;; we are mapping over the caddr of the node
-  (let* ([fn-parts (cdr node)]
-         [name (cdr (assoc 'name fn-parts))]
-         [inputs (cdr (assoc 'input fn-parts))]
-         [pipeline (assoc 'pipeline fn-parts)])
-    (map rust/g (list name inputs pipeline))))
+  ; gather the source defs
+  (define source-defs
+    (filter-map
+     (lambda (node)
+       (match node
+         [(source-def path)
+          (match-let ([(source-data sol-macro name events) (generate-code node)])
+            (cons sol-macro (cons name events)))] ; we are returning this so we can construct a hash table from name and events with the rest of the returned list
+         [_ false]))
+     parsed-input))
 
-(define (rust/g node)
-  (cond
-    [(identifier? node) (generate-identifier node)]
+  ; Creates a hash map from an abi instance -> all of the event names
+  (define source-hash (make-hash (map (lambda (item) (rest item)) source-defs)))
 
-    [(fn-args? node) (generate-fn-args node)]
+  (println source-hash)
+  (define (instance-events instance)
+    (match-let ([(instance-def name abi address) instance])
+      (let* ([events (hash-ref source-hash abi)]
+             [_ (println events)]
+             [event-getters (map (lambda (event-name) (get-events/gen event-name abi address))
+                                 events)])
+        (list name (string-join event-getters)))))
 
-    [(expression? node) (generate-expression node)]
+  ; generate the code for the instances
+  (define instances-def-code
+    (let ([instance-events (map instance-events contract-instances)])
+      (map
+       (lambda (instance)
+         (let ([name (first instance)] [events (rest instance)])
+           (expand-string
+            "
+        map_insert!(\"{{name}}\",
+                    map_literal! {
+{{instance-events}}
+                    },
+                    output_map);
+"
+            (hash "name" name "instance-events" events))))
+       instance-events)))
 
-    [(map? node) (generate-map node)]
+  ; generate  the code for the source defs
+  (define source-def-code (string-join (map first source-defs)))
 
-    [(pipeline? node) (generate-pipeline node)]
+  ; generate the code for the rest of the nodes
+  (define generated-code
+    (let ([module-code (string-join (map generate-code
+                                         (filter (lambda (node)
+                                                   (match node
+                                                     [(source-def _) false]
+                                                     [(instance-def _ _ _) false]
+                                                     [_ true]))
+                                                 parsed-input)))])
+      (string-append source-def-code instances-def-code module-code)))
+  (println "Generated Code")
+  (write-string-to-file generated-code "/tmp/streamline.rs")
+  (println source-hash)
+  (println "Wrote output code"))
 
-    [(lambda? node) (generate-lambda node)]
-
-    [(module? node) (generate-module node)]
-
-    [else (error (format "UNKNOWN NODE! ~a" node))]))
-
-(define (compile ast)
-  (for/fold ([acc rust-imports]) ([node ast])
-    (let ([code (rust/g node)]) (values (string-append acc code)))))
-
-;(generate-module (car parser-result))
-; first module node
-parser-result
-
-; list of module inputs
-;(cdadar parser-result)
-
-; identifer of module
-;(rust/g (cdadar parser-result))
-;(cdddar parser-result)
-(rust/g (car parser-result))
+(generate-streamline-file "examples/erc721.strm")

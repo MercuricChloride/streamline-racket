@@ -5,43 +5,64 @@
          data/monad
          data/functor
          data/applicative
+         dali
          "./lexer.rkt")
+
+;; STRUCTS
+(struct primitive-value (value) #:prefab) ; IE Boolean etc
+(struct identifier (name) #:prefab) ; foo
+(struct type (name) #:prefab) ; foo
+(struct typed-field (name type) #:prefab) ; id: address
+(struct rpc-call (fn-access typed-args) #:prefab) ; ERC721::#ownerOf(id: address)#
+
+(struct map-literal (kvs) #:prefab) ; { ... }
+(struct key-value (key value) #:prefab) ; foo: bar,
+(struct field-access (lh rh) #:prefab) ; foo.bar
+
+(struct lam (args body) #:prefab) ; (foo) => bar;
+(struct hof (hof callback) #:prefab) ; map (foo) => bar;
+(struct pipeline (functors) #:prefab) ; |> (foo) => bar;
+
+(struct mfn (name inputs body) #:prefab) ; mfn foo = EVENTS...
+(struct sfn (name inputs body) #:prefab) ; sfn foo = EVENTS ...
+(struct source-def (path) #:prefab) ; import "foo.sol";
+(struct instance-def (name abi-type address) #:prefab) ; bayc = ERC721(0x...);
 
 ;; EXPRESSIONS
 (define true/p (do (token/p 'TRUE) (pure `(boolean ,#t))))
 (define false/p (do (token/p 'FALSE) (pure `(boolean ,#f))))
-(define string-literal/p (do (str <- (token/p 'STRING)) (pure `(string-literal ,str))))
-(define number-literal/p (do (num <- (token/p 'NUMBER)) (pure `(number-literal ,num))))
+(define string-literal/p (do (str <- (token/p 'STRING)) (pure str)))
+(define number-literal/p (do (num <- (token/p 'NUMBER)) (pure num)))
 
-(define ident/p (do [ident <- (token/p 'IDENTIFIER)] (pure `(identifier ,ident))))
-(define type/p (do (ident <- ident/p) (pure `(type ,ident))))
+(define ident/p (do [ident <- (token/p 'IDENTIFIER)] (pure ident)))
+(define type/p (do (ident <- ident/p) (pure ident)))
 
 (define field-access/p
   (do [lh <- ident/p]
       (token/p 'DOT)
       (rh <- (or/p (try/p field-access/p) ident/p))
-      (pure `(field-access ,lh ,rh))))
+      (pure (field-access lh rh))))
 
 (define key-value/p
-  (do [key <- ident/p] (token/p 'COLON) [val <- (lazy/p expression/p)] (pure `(key-value ,key ,val))))
+  (do [key <- ident/p] (token/p 'COLON) [val <- (lazy/p expression/p)] (pure (key-value key val))))
 
 (define map-literal/p
   (do (token/p 'LCURLY)
       [kvs <- (many/p key-value/p #:min 1 #:sep (token/p 'COMMA))]
       (token/p 'RCURLY)
-      (pure `(map-literal ,kvs))))
+      (pure (map-literal kvs))))
 
 (define typed-field/p
-  (do (ident <- ident/p) (token/p 'COLON) (type <- type/p) (pure (list ident type))))
+  (do (ident <- ident/p) (token/p 'COLON) (type <- type/p) (pure (typed-field ident type))))
 
 (define rpc-call/p
   (do (token/p 'HASH)
-      (fn <- (or/p field-access/p ident/p))
+      (fn-access <- (or/p field-access/p ident/p))
       (token/p 'LPAREN)
       (typed-args <- (many/p typed-field/p))
       (token/p 'RPAREN)
       (token/p 'HASH)
-      (pure `(rpc-call ,fn (args ,typed-args)))))
+      (pure (rpc-call fn-access typed-args))))
 
 (define expression/p
   (or/p rpc-call/p
@@ -61,42 +82,38 @@
       (token/p 'RPAREN)
       (token/p 'FAT-ARROW)
       [exprs <- expression/p]
-      (pure `(lambda (fn-args ,fn-args) ,exprs))))
+      (pure (lam fn-args exprs))))
 
-(define map/p (do (token/p 'MAP) [callback <- lambda/p] (pure `(map ,callback))))
+(define map/p (do (token/p 'MAP) [callback <- lambda/p] (pure (hof "map" callback))))
 
-(define filter/p (do (token/p 'FILTER) [callback <- lambda/p] (pure `(filter ,callback))))
+(define filter/p (do (token/p 'FILTER) [callback <- lambda/p] (pure (hof "filter" callback))))
 
 (define functor/p (do (token/p 'PIPE) [f <- (or/p map/p filter/p lambda/p)] (pure f)))
 
 (define pipeline/p
-  (do [applications <- (many/p functor/p #:min 1 #:sep (token/p 'SEMI))] (pure applications)))
+  (do [applications <- (many/p functor/p #:min 1 #:sep (token/p 'SEMI))]
+      (pure (pipeline applications))))
 
 (define mfn/p
   (do (token/p 'MFN)
       [name <- ident/p]
       (token/p 'ASSIGNMENT)
-      [input <- ident/p]
-      [expression <- pipeline/p]
-      (pure `(mfn (name . ,name) (input . ,input) (pipeline ,@expression)))))
+      [inputs <- (many/p ident/p #:min 1 #:sep (token/p 'SEMI))]
+      [pipeline <- pipeline/p]
+      (pure (mfn name inputs pipeline))))
 
 (define sfn/p
   (do (token/p 'SFN)
       [name <- (token/p 'IDENTIFIER)]
       (token/p 'ASSIGNMENT)
-      [input <- (token/p 'IDENTIFIER)]
+      [inputs <- (many/p ident/p #:min 1 #:sep (token/p 'SEMI))]
       [pipeline <- pipeline/p]
-      (pure `(mfn ,name ,input ,pipeline))))
+      (pure (sfn name inputs pipeline))))
 
 (define module-def/p (or/p mfn/p sfn/p))
 
 (define source-def/p
-  (do (token/p 'SOURCE)
-      (name <- ident/p)
-      (token/p 'ASSIGNMENT)
-      (path <- (token/p 'STRING))
-      (token/p 'SEMI)
-      (pure `(source ,name ,path))))
+  (do (token/p 'SOURCE) (path <- (token/p 'STRING)) (token/p 'SEMI) (pure (source-def path))))
 
 (define instance-def/p
   (do (name <- ident/p)
@@ -106,13 +123,29 @@
       (address <- (token/p 'ADDRESS))
       (token/p 'RPAREN)
       (token/p 'SEMI)
-      (pure `(instance ,name ,abi-type ,address))))
+      (pure (instance-def name abi-type address))))
 
 (define streamline/p
   (do [cells <- (many/p (or/p module-def/p source-def/p instance-def/p))] (pure cells)))
 
-(define parser-result (parse-result! (parse-tokens streamline/p tokenized-input)))
+(define (parse-file! tokenized-input)
+  (parse-result! (parse-tokens streamline/p tokenized-input)))
 
-parser-result
+(provide parse-file!
+         primitive-value
+         identifier
+         type
+         typed-field
+         rpc-call
 
-(provide parser-result)
+         map-literal
+         key-value
+         field-access
+         lam
+         hof
+         pipeline
+
+         mfn
+         sfn
+         source-def
+         instance-def)

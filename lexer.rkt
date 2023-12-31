@@ -4,7 +4,7 @@
 
 (define-lex-abbrevs
  (whitespace? whitespace)
- (keyword? (:or "map" "filter" "reduce" "mfn" "sfn" "fn" "true" "false" "source"))
+ (keyword? (:or "map" "filter" "reduce" "mfn" "sfn" "fn" "true" "false" "import"))
  (identifier? (:seq alphabetic (:* (:or alphabetic numeric))))
  ;TODO Fix operator precedence
  (operator? (:or "+" "-" "*" "/" "==" "!=" "<" ">" "<=" ">=" "&&" "||" "!" "|>" "="))
@@ -78,7 +78,7 @@
     ["reduce" token-REDUCE]
     ["true" token-TRUE]
     ["false" token-FALSE]
-    ["source" token-SOURCE]))
+    ["import" token-SOURCE]))
 
 (define (string->string-token str)
   (let ([replacement (if (string-prefix? str "\"") "\"" "'")]) (string-replace str replacement "")))
@@ -87,7 +87,7 @@
   (lexer-src-pos [(eof) (return-without-pos 'EOF)]
                  [whitespace? (return-without-pos (streamline-lexer input-port))] ;remove whitespace
                  [keyword? ((string->keyword-token lexeme))]
-                 [identifier? (token-IDENTIFIER (string->symbol lexeme))]
+                 [identifier? (token-IDENTIFIER lexeme)]
                  [operator? ((string->operator lexeme))]
                  ;; literals
                  [address? (token-ADDRESS lexeme)]
