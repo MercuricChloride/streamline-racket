@@ -54,6 +54,7 @@
 (define map-literal/p
   (do (token/p 'LCURLY)
       [kvs <- (many/p key-value/p #:min 1 #:sep (token/p 'COMMA))]
+      (many/p #:max 1 (token/p 'COMMA))
       (token/p 'RCURLY)
       (pure (map-literal kvs))))
 
