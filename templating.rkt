@@ -1,21 +1,15 @@
 #lang racket
 
-(require json)
 (require dali)
 (require "./lexer.rkt")
 (require "./parser.rkt")
 
-(define (escape-string str)
-  (let* ([output (string-replace str "&amp;amp;" "&")]
-         [output (string-replace output "&amp;quot;" "\"")]
-         [output (string-replace output "&amp;" "&")]
-         [output (string-replace output "&quot;" "\"")]
-         [output (string-replace output "&lt;" "<")]
-         [output (string-replace output "&amp;lt;" "<")]
-         [output (string-replace output "&gt;" ">")]
-         [output (string-replace output "&amp;gt;" ">")]
-         [output (string-replace output "&amp;" "&")])
-    output))
+; The dali template library escapes a bunch of characters, we don't need this.
+; So we just set the escape-replacements parameter to be effectively nothing. (it checks for an empty list)
+(escape-replacements '(("&" . "&")))
+
+(define (expand str kvs)
+  (expand-string str kvs))
 
 (define-syntax-rule (gen proc args ...) (apply proc (map generate-code (list args ...))))
 
@@ -23,16 +17,7 @@
 (struct source-data (sol-macro name events))
 
 (define (fn-inputs input)
-  (expand-string "{{#inputs}} {{ident}}: {{type}} {{/inputs}}" input))
-
-(define (fn-template input)
-  (expand-string
-   "
-   #[substreams::handlers::map]
-   fn {{fn-name}}({{inputs}}) -> prost_wkt_types::Struct {
-       {{expression}}
-   }"
-   input))
+  (expand "{{#inputs}} {{ident}}: {{type}} {{/inputs}}" input))
 
 (define-syntax-rule (source path)
   (let* ([source-code (port->string (open-input-file path))]
@@ -41,7 +26,7 @@
          [name (regexp-match* #rx"(?:interface|contract) ([a-zA-Z$_][a-zA-Z0-9$_]*)"
                               source-code
                               #:match-select cadr)]
-         [sol-macro (expand-string "
+         [sol-macro (expand "
 loose_sol! {
   {{solidity}}
 }
@@ -49,14 +34,14 @@ loose_sol! {
     (contract-instance sol-macro name events)))
 
 (define (get-events/gen event-name abi address)
-  (expand-string
+  (expand
    "
     \"{{event-name}}\"; {{abi}}::{{event-name}}::get_events(&blk, &[&address!(\"{{address}}\")])
 "
    (hash "event-name" event-name "abi" abi "address" (string-downcase (substring address 2)))))
 
 (define (instance-def/gen name identifier address)
-  (expand-string
+  (expand
    "
         map_insert!(\"{{name}}\",
                     map_literal! {
@@ -82,7 +67,7 @@ loose_sol! {
          [name (regexp-match* #rx"(?:interface|contract) ([a-zA-Z$_][a-zA-Z0-9$_]*)"
                               source-code
                               #:match-select cadr)]
-         [sol-macro (expand-string "
+         [sol-macro (expand "
 loose_sol! {
   {{solidity}}
 }
@@ -99,7 +84,7 @@ loose_sol! {
         "let output_map = todo!();"))
 
   (define format-inputs (format "format_inputs!(~a);" (string-join inputs ",")))
-  (expand-string
+  (expand
    "
 #[substreams::handlers::map]
 fn {{name}}({{inputs}}) -> Option<prost_wkt_types::Struct> {
@@ -125,7 +110,7 @@ fn {{name}}({{inputs}}) -> Option<prost_wkt_types::Struct> {
   (define -inputs
     (string-join (map (lambda (input) (format "~a: prost_wkt_types::Struct" input)) inputs) ","))
   (define format-inputs (format "format_inputs!(~a);" (string-join inputs ",")))
-  (expand-string
+  (expand
    "
 #[substreams::handlers::map]
 fn {{name}}({{inputs}}) -> Option<prost_wkt_types::Struct> {
@@ -142,28 +127,28 @@ fn {{name}}({{inputs}}) -> Option<prost_wkt_types::Struct> {
 
 (define (lam/gen fn-args exprs)
   (define -args (fmt-args fn-args))
-  (expand-string "
+  (expand "
 let output_map = (|{{args}}| { {{exprs}} })(output_map);
 "
-                 (hash "args" -args "exprs" exprs)))
+          (hash "args" -args "exprs" exprs)))
 
 (define (hof/gen hof-kind fn-args exprs)
   (define -args (string-join fn-args ","))
-  (expand-string
+  (expand
    "
   let output_map:Option<Vec<serde_json::Value>> = {{kind}}!(output_map, |{{args}}| { {{exprs}} });
 "
    (hash "kind" hof-kind "args" -args "exprs" exprs)))
 
 (define (map-literal/gen kvs)
-  (expand-string "
+  (expand "
 map_literal!{
 {{kvs}}
 }
 " (hash "kvs" (string-join kvs ","))))
 
 (define (key-value/gen key val)
-  (expand-string "
+  (expand "
 \"{{key}}\"; {{val}}
 " (hash "key" key "val" val)))
 
@@ -254,7 +239,7 @@ fn map_events(blk: eth::Block) -> Option<prost_wkt_types::Struct> {
         (map
          (lambda (instance)
            (let ([name (first instance)] [events (rest instance)])
-             (expand-string
+             (expand
               "
         map_insert!(\"{{name}}\",
                     map_literal! {
@@ -270,17 +255,16 @@ fn map_events(blk: eth::Block) -> Option<prost_wkt_types::Struct> {
 
   ; generate the code for the rest of the nodes
   (define generated-code
-    (escape-string (let ([module-code (string-join (map generate-code
-                                                        (filter (lambda (node)
-                                                                  (match node
-                                                                    [(source-def _) false]
-                                                                    [(instance-def _ _ _) false]
-                                                                    [_ true]))
-                                                                parsed-input)))])
-                     (string-append source-def-code instances-def-code module-code))))
+    (let ([module-code (string-join (map generate-code
+                                         (filter (lambda (node)
+                                                   (match node
+                                                     [(source-def _) false]
+                                                     [(instance-def _ _ _) false]
+                                                     [_ true]))
+                                                 parsed-input)))])
+      (string-append source-def-code instances-def-code module-code)))
   (println "Generated Code")
   (write-string-to-file generated-code "/tmp/streamline.rs")
-  (println source-hash)
   (println "Wrote output code"))
 
 (generate-streamline-file "examples/erc721.strm")
