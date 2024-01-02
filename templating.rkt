@@ -267,4 +267,4 @@ fn map_events(blk: eth::Block) -> Option<prost_wkt_types::Struct> {
   (write-string-to-file generated-code "/tmp/streamline.rs")
   (println "Wrote output code"))
 
-(generate-streamline-file "examples/erc721.strm")
+(generate-streamline-file "examples/teller.strm")
