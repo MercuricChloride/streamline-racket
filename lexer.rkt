@@ -5,7 +5,7 @@
 (define-lex-abbrevs
  (whitespace? whitespace)
  (keyword? (:or "map" "filter" "reduce" "mfn" "sfn" "fn" "true" "false" "import"))
- (identifier? (:seq alphabetic (:* (:or alphabetic numeric))))
+ (identifier? (:seq (:or alphabetic (char-set "$_")) (:* (:or alphabetic numeric (char-set "$_")))))
  ;TODO Fix operator precedence
  (operator? (:or "+" "-" "*" "/" "==" "!=" "<" ">" "<=" ">=" "&&" "||" "!" "|>" "="))
  (punct? (:or (char-set "(){}[];:\"'.,#") "=>"))

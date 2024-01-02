@@ -17,7 +17,7 @@
 
 (struct map-literal (kvs) #:prefab) ; { ... }
 (struct key-value (key value) #:prefab) ; foo: bar,
-(struct field-access (lh rh) #:prefab) ; foo.bar
+(struct field-access (lh fields) #:prefab) ; foo.bar or foo.bar.baz
 
 (struct lam (args body) #:prefab) ; (foo) => bar;
 (struct hof (hof callback) #:prefab) ; map (foo) => bar;
@@ -37,11 +37,16 @@
 (define ident/p (do [ident <- (token/p 'IDENTIFIER)] (pure ident)))
 (define type/p (do (ident <- ident/p) (pure ident)))
 
+(define (flatten-field-access rh)
+  (match rh
+    [(field-access lh rh) (flatten (list lh (flatten-field-access rh)))]
+    [_ (list rh)]))
+
 (define field-access/p
   (do [lh <- ident/p]
       (token/p 'DOT)
       (rh <- (or/p (try/p field-access/p) ident/p))
-      (pure (field-access lh rh))))
+      (pure (field-access lh (flatten-field-access rh)))))
 
 (define key-value/p
   (do [key <- ident/p] (token/p 'COLON) [val <- (lazy/p expression/p)] (pure (key-value key val))))
@@ -88,11 +93,9 @@
 
 (define filter/p (do (token/p 'FILTER) [callback <- lambda/p] (pure (hof "filter" callback))))
 
-(define functor/p (do (token/p 'PIPE) [f <- (or/p map/p filter/p lambda/p)] (pure f)))
+(define functor/p (do (token/p 'PIPE) [f <- (or/p map/p filter/p lambda/p)] (token/p 'SEMI) (pure f)))
 
-(define pipeline/p
-  (do [applications <- (many/p functor/p #:min 1 #:sep (token/p 'SEMI))]
-      (pure (pipeline applications))))
+(define pipeline/p (do [applications <- (many/p functor/p #:min 1)] (pure (pipeline applications))))
 
 (define mfn/p
   (do (token/p 'MFN)

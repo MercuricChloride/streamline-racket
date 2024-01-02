@@ -5,6 +5,18 @@
 (require "./lexer.rkt")
 (require "./parser.rkt")
 
+(define (escape-string str)
+  (let* ([output (string-replace str "&amp;amp;" "&")]
+         [output (string-replace output "&amp;quot;" "\"")]
+         [output (string-replace output "&amp;" "&")]
+         [output (string-replace output "&quot;" "\"")]
+         [output (string-replace output "&lt;" "<")]
+         [output (string-replace output "&amp;lt;" "<")]
+         [output (string-replace output "&gt;" ">")]
+         [output (string-replace output "&amp;gt;" ">")]
+         [output (string-replace output "&amp;" "&")])
+    output))
+
 (define-syntax-rule (gen proc args ...) (apply proc (map generate-code (list args ...))))
 
 ;; Data for generating contract source code
@@ -80,18 +92,34 @@ loose_sol! {
 (define (mfn/gen name inputs body)
   (define -inputs
     (string-join (map (lambda (input) (format "~a: prost_wkt_types::Struct" input)) inputs) ","))
+
+  (define initial-value
+    (if (= (length inputs) 1)
+        (format "let output_map = ~a;" (first inputs))
+        "let output_map = todo!();"))
+
   (define format-inputs (format "format_inputs!(~a);" (string-join inputs ",")))
   (expand-string
    "
 #[substreams::handlers::map]
-fn {{name}}({{inputs}}) -> prost_wkt_types::Struct {
+fn {{name}}({{inputs}}) -> Option<prost_wkt_types::Struct> {
     {{format-inputs}}
     with_map! {output_map,
+      {{initial-value}}
       {{body}}
    }
 }
 "
-   (hash "name" name "inputs" -inputs "format-inputs" format-inputs "body" body)))
+   (hash "name"
+         name
+         "inputs"
+         -inputs
+         "format-inputs"
+         format-inputs
+         "body"
+         body
+         "initial-value"
+         initial-value)))
 
 (define (sfn/gen name inputs body)
   (define -inputs
@@ -100,7 +128,7 @@ fn {{name}}({{inputs}}) -> prost_wkt_types::Struct {
   (expand-string
    "
 #[substreams::handlers::map]
-fn {{name}}({{inputs}}) -> prost_wkt_types::Struct {
+fn {{name}}({{inputs}}) -> Option<prost_wkt_types::Struct> {
     {{format-inputs}}
     with_map! {output_map,
       {{body}}
@@ -109,32 +137,63 @@ fn {{name}}({{inputs}}) -> prost_wkt_types::Struct {
 "
    (hash "name" name "inputs" -inputs "format-inputs" format-inputs "body" body)))
 
+(define (fmt-args args)
+  (string-join (map (lambda (arg) (format "~a: Map<String, serde_json::Value>" arg)) args) ","))
+
 (define (lam/gen fn-args exprs)
-  (define -args (string-join (map (lambda (arg) (format "~a: ValueMap" arg)) fn-args) ","))
+  (define -args (fmt-args fn-args))
   (expand-string "
 let output_map = (|{{args}}| { {{exprs}} })(output_map);
 "
                  (hash "args" -args "exprs" exprs)))
 
+(define (hof/gen hof-kind fn-args exprs)
+  (define -args (string-join fn-args ","))
+  (expand-string
+   "
+  let output_map:Option<Vec<serde_json::Value>> = {{kind}}!(output_map, |{{args}}| { {{exprs}} });
+"
+   (hash "kind" hof-kind "args" -args "exprs" exprs)))
+
+(define (map-literal/gen kvs)
+  (expand-string "
+map_literal!{
+{{kvs}}
+}
+" (hash "kvs" (string-join kvs ","))))
+
+(define (key-value/gen key val)
+  (expand-string "
+\"{{key}}\"; {{val}}
+" (hash "key" key "val" val)))
+
 (define (write-string-to-file string filename)
-  (with-output-to-file filename (lambda () (display string)) #:exists 'replace))
+  (with-output-to-file filename (lambda () (pretty-display string)) #:exists 'replace))
 
 (define (generate-code node)
   (match node
     [(source-def path) (gen source-def/gen path)]
     [(instance-def name identifier address) (gen instance-def/gen name identifier address)]
+    [(map-literal kvs) (map-literal/gen (map generate-code kvs))]
+    [(key-value key val) (gen key-value/gen key val)]
     [(identifier name) (gen symbol->string name)]
     [(mfn name inputs body) (gen mfn/gen name inputs body)]
     [(sfn name inputs body) (gen sfn/gen name inputs body)]
     [(lam fn-args exprs) (gen lam/gen fn-args exprs)]
+    [(hof kind (lam args body)) (gen hof/gen kind args body)]
     [(pipeline functors) (string-join (map generate-code functors) "\n")]
-    [(field-access lh rh) (gen (lambda (lh rh) (format "map_access!(~a . ~a)" lh rh)) lh rh)]
+    [(field-access lh rhs)
+     (gen (lambda (lh rhs)
+            (format "map_access!(&~a,~a)"
+                    lh
+                    (string-join (map (lambda (e) (format "\"~a\"" e)) rhs) ",")))
+          lh
+          rhs)]
     [(? string?) node]
     [(? number?) node]
     [(list item ...)
      (string? item)
-     node]
-    [_ ""]))
+     node]))
 
 (define (generate-streamline-file path)
   ; open a port to the source
@@ -184,7 +243,7 @@ let output_map = (|{{args}}| { {{exprs}} })(output_map);
     (format
      "
 #[substreams::handlers::map]
-fn map_events(blk: eth::Block) -> prost_wkt_types::Struct {
+fn map_events(blk: eth::Block) -> Option<prost_wkt_types::Struct> {
   with_map!{output_map,
   ~a
   }
@@ -211,14 +270,14 @@ fn map_events(blk: eth::Block) -> prost_wkt_types::Struct {
 
   ; generate the code for the rest of the nodes
   (define generated-code
-    (let ([module-code (string-join (map generate-code
-                                         (filter (lambda (node)
-                                                   (match node
-                                                     [(source-def _) false]
-                                                     [(instance-def _ _ _) false]
-                                                     [_ true]))
-                                                 parsed-input)))])
-      (string-append source-def-code instances-def-code module-code)))
+    (escape-string (let ([module-code (string-join (map generate-code
+                                                        (filter (lambda (node)
+                                                                  (match node
+                                                                    [(source-def _) false]
+                                                                    [(instance-def _ _ _) false]
+                                                                    [_ true]))
+                                                                parsed-input)))])
+                     (string-append source-def-code instances-def-code module-code))))
   (println "Generated Code")
   (write-string-to-file generated-code "/tmp/streamline.rs")
   (println source-hash)
