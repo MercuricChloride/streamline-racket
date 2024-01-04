@@ -162,6 +162,10 @@ map_literal!{
     [(map-literal kvs) (map-literal/gen (map generate-code kvs))]
     [(key-value key val) (gen key-value/gen key val)]
     [(identifier name) (gen symbol->string name)]
+    [(string-literal value) (format "sol_type!(String, \"~a\")" value)]
+    [(number-literal value) (format "sol_type!(Uint, \"~a\")" value)]
+    [(boolean-literal value) (format "sol_type!(Boolean, \"~a\")" (if value "1" "0"))]
+    [(address-literal value) (format "sol_type!(Address, \"~a\")" value)]
     [(mfn name inputs body) (gen mfn/gen name inputs body)]
     [(sfn name inputs body) (gen sfn/gen name inputs body)]
     [(lam fn-args exprs) (gen lam/gen fn-args exprs)]
@@ -267,4 +271,4 @@ fn map_events(blk: eth::Block) -> Option<prost_wkt_types::Struct> {
   (write-string-to-file generated-code "/tmp/streamline.rs")
   (println "Wrote output code"))
 
-(generate-streamline-file "examples/teller.strm")
+(generate-streamline-file "examples/erc721.strm")

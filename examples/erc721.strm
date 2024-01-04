@@ -3,10 +3,16 @@ import "interfaces/ERC721.sol";
 bayc = ERC721(0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D);
 milady = ERC721(0x5Af0D9827E0c53E4799BB226655A1de152A425a5);
 
-mfn tokens = mapEvents
+mfn baycTransfers = mapEvents
     |> (events) => events.bayc.Transfer;
-    |> map (transfer) => { epicToken: transfer._tokenId };
+    |> map (transfer) => {
+       epicToken: transfer._tokenId,
+       greeting: "Hello!",
+       num: 42,
+       foo: true,
+       add: 0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D
+    };
 
-mfn approvalForAll = mapEvents
-    |> (events) => events.bayc.ApprovalForAll;
-    |> map (approval) => approval._approved;
+mfn miladyTransfers = mapEvents
+    |> (events) => events.milady.Transfer;
+    |> map (transfer) => { epicToken: transfer._tokenId };

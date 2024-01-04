@@ -16,6 +16,10 @@
 (struct rpc-call (fn-access typed-args) #:prefab) ; ERC721::#ownerOf(id: address)#
 
 (struct map-literal (kvs) #:prefab) ; { ... }
+(struct string-literal (str) #:prefab) ; "hi"
+(struct number-literal (num) #:prefab) ; 42
+(struct boolean-literal (val) #:prefab) ; true / false
+(struct address-literal (val) #:prefab) ; 0xabc123...
 (struct key-value (key value) #:prefab) ; foo: bar,
 (struct field-access (lh fields) #:prefab) ; foo.bar or foo.bar.baz
 
@@ -29,10 +33,11 @@
 (struct instance-def (name abi-type address) #:prefab) ; bayc = ERC721(0x...);
 
 ;; EXPRESSIONS
-(define true/p (do (token/p 'TRUE) (pure `(boolean ,#t))))
-(define false/p (do (token/p 'FALSE) (pure `(boolean ,#f))))
-(define string-literal/p (do (str <- (token/p 'STRING)) (pure str)))
-(define number-literal/p (do (num <- (token/p 'NUMBER)) (pure num)))
+(define true/p (do (token/p 'TRUE) (pure (boolean-literal #t))))
+(define false/p (do (token/p 'FALSE) (pure (boolean-literal #f))))
+(define string-literal/p (do (str <- (token/p 'STRING)) (pure (string-literal str))))
+(define number-literal/p (do (num <- (token/p 'NUMBER)) (pure (number-literal num))))
+(define address-literal/p (do (addr <- (token/p 'ADDRESS)) (pure (address-literal addr))))
 
 (define ident/p (do [ident <- (token/p 'IDENTIFIER)] (pure ident)))
 (define type/p (do (ident <- ident/p) (pure ident)))
@@ -77,6 +82,7 @@
         false/p
         string-literal/p
         number-literal/p
+        address-literal/p
         (try/p field-access/p)
         ident/p))
 
@@ -143,6 +149,10 @@
          rpc-call
 
          map-literal
+         string-literal
+         number-literal
+         boolean-literal
+         address-literal
          key-value
          field-access
          lam
