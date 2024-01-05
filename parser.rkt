@@ -132,11 +132,22 @@
 
 (define pipeline/p (do [applications <- (many/p functor/p #:min 1)] (pure (pipeline applications))))
 
+(define many-module-inputs/p
+  (do (token/p 'LBRACKET)
+      [inputs <- (many/p ident/p #:min 1 #:sep (token/p 'COMMA))]
+      (token/p 'RBRACKET)
+      (pure inputs)))
+
+(define single-module-input/p (do [inputs <- ident/p] (pure (list inputs))))
+
+(define module-inputs/p
+  (do (inputs <- (or/p (try/p many-module-inputs/p) single-module-input/p)) (pure inputs)))
+
 (define mfn/p
   (do (token/p 'MFN)
       [name <- ident/p]
       (token/p 'ASSIGNMENT)
-      [inputs <- (many/p ident/p #:min 1 #:sep (token/p 'SEMI))]
+      [inputs <- module-inputs/p]
       [pipeline <- pipeline/p]
       (pure (mfn name inputs pipeline))))
 
@@ -144,7 +155,7 @@
   (do (token/p 'SFN)
       [name <- (token/p 'IDENTIFIER)]
       (token/p 'ASSIGNMENT)
-      [inputs <- (many/p ident/p #:min 1 #:sep (token/p 'SEMI))]
+      [inputs <- module-inputs/p]
       [pipeline <- pipeline/p]
       (pure (sfn name inputs pipeline))))
 

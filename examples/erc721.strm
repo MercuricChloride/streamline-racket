@@ -17,10 +17,11 @@ mfn baycTransfers = mapEvents
        subTest: 42 - 15,
        compareTest: 42 == 42,
        foo: true,
-       add: 0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D,
-       addCompare: 0x5Af0D9827E0c53E4799BB226655A1de152A425a5 == 0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D
+       addr: 0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D,
+       addrCompare: 0x5Af0D9827E0c53E4799BB226655A1de152A425a5 == 0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D,
+       baycEqual: 0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D == 0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D
     };
 
-mfn miladyTransfers = mapEvents
-    |> (events) => events.milady.Transfer;
+mfn miladyTransfers = [mapEvents, baycTransfers]
+    |> (events, bayc) => events.milady.Transfer;
     |> map (transfer) => { epicToken: transfer._tokenId };

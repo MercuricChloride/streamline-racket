@@ -21,8 +21,9 @@
 
 (define-syntax-rule (source path)
   (let* ([source-code (port->string (open-input-file path))]
-         [events
-          (regexp-match* #rx"event ([a-zA-Z$_][a-zA-Z0-9$_]*)" source-code #:match-select cadr)]
+         [events (regexp-match* #rx"event ([a-zA-Z$_][a-zA-Z0-9$_]*)\\([a-zA-Z$_][a-zA-Z0-9$_]*\\)"
+                                source-code
+                                #:match-select cadr)]
          [name (regexp-match* #rx"(?:interface|contract) ([a-zA-Z$_][a-zA-Z0-9$_]*)"
                               source-code
                               #:match-select cadr)]
@@ -62,8 +63,10 @@ loose_sol! {
 
 (define (source-def/gen path)
   (let* ([source-code (port->string (open-input-file path))]
-         [events
-          (regexp-match* #rx"event ([a-zA-Z$_][a-zA-Z0-9$_]*)" source-code #:match-select cadr)]
+         [events (filter (lambda (i) (not (false? i)))
+                         (regexp-match* #rx"event ([a-zA-Z$_][a-zA-Z0-9$_]*)\\("
+                                        source-code
+                                        #:match-select cadr))]
          [name (regexp-match* #rx"(?:interface|contract) ([a-zA-Z$_][a-zA-Z0-9$_]*)"
                               source-code
                               #:match-select cadr)]
@@ -81,7 +84,7 @@ loose_sol! {
   (define initial-value
     (if (= (length inputs) 1)
         (format "let output_map = ~a;" (first inputs))
-        "let output_map = todo!();"))
+        (format "let output_map = (~a);" (string-join inputs ", "))))
 
   (define format-inputs (format "format_inputs!(~a);" (string-join inputs ",")))
   (expand
@@ -126,11 +129,12 @@ fn {{name}}({{inputs}}) -> Option<prost_wkt_types::Struct> {
   (string-join (map (lambda (arg) (format "~a: Map<String, serde_json::Value>" arg)) args) ","))
 
 (define (lam/gen fn-args exprs)
-  (define -args (fmt-args fn-args))
+  (define -args (string-join fn-args ","))
+  (define arg-types (string-join (map (lambda (_) "Map<String, serde_json::Value>") fn-args) ","))
   (expand "
-let output_map = (|{{args}}| { {{exprs}} })(output_map);
+let output_map = (|({{args}}): ({{arg-types}})| { {{exprs}} })(output_map);
 "
-          (hash "args" -args "exprs" exprs)))
+          (hash "args" -args "arg-types" arg-types "exprs" exprs)))
 
 (define (hof/gen hof-kind fn-args exprs)
   (define -args (string-join fn-args ","))
@@ -275,4 +279,4 @@ fn map_events(blk: eth::Block) -> Option<prost_wkt_types::Struct> {
   (write-string-to-file generated-code "/tmp/streamline.rs")
   (println "Wrote output code"))
 
-(generate-streamline-file "examples/erc721.strm")
+(generate-streamline-file "examples/teller.strm")
