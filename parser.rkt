@@ -20,6 +20,7 @@
 (struct number-literal (num) #:prefab) ; 42
 (struct boolean-literal (val) #:prefab) ; true / false
 (struct address-literal (val) #:prefab) ; 0xabc123...
+(struct binary-op (lh op rh) #:prefab) ; 42 + 5
 (struct key-value (key value) #:prefab) ; foo: bar,
 (struct field-access (lh fields) #:prefab) ; foo.bar or foo.bar.baz
 
@@ -38,6 +39,9 @@
 (define string-literal/p (do (str <- (token/p 'STRING)) (pure (string-literal str))))
 (define number-literal/p (do (num <- (token/p 'NUMBER)) (pure (number-literal num))))
 (define address-literal/p (do (addr <- (token/p 'ADDRESS)) (pure (address-literal addr))))
+(define literal/p
+  (do [literal <- (or/p true/p false/p string-literal/p number-literal/p address-literal/p)]
+      (pure literal)))
 
 (define ident/p (do [ident <- (token/p 'IDENTIFIER)] (pure ident)))
 (define type/p (do (ident <- ident/p) (pure ident)))
@@ -55,6 +59,29 @@
 
 (define key-value/p
   (do [key <- ident/p] (token/p 'COLON) [val <- (lazy/p expression/p)] (pure (key-value key val))))
+
+(define binary-operators/p
+  (do (op <-
+          (or/p (token/p 'PLUS)
+                (token/p 'MINUS)
+                (token/p 'MUL)
+                (token/p 'DIV)
+                (token/p 'EQ)
+                (token/p 'NOT-EQ)
+                (token/p 'LT)
+                (token/p 'GT)
+                (token/p 'LTE)
+                (token/p 'GTE)
+                (token/p 'AND)
+                (token/p 'OR)
+                (token/p 'NOT)))
+      (pure op)))
+
+(define binary-op/p
+  (do [lh <- (or/p literal/p ident/p (try/p field-access/p))]
+      [op <- binary-operators/p]
+      [rh <- (lazy/p expression/p)]
+      (pure (binary-op lh op rh))))
 
 (define map-literal/p
   (do (token/p 'LCURLY)
@@ -76,7 +103,8 @@
       (pure (rpc-call fn-access typed-args))))
 
 (define expression/p
-  (or/p rpc-call/p
+  (or/p (try/p binary-op/p)
+        rpc-call/p
         map-literal/p
         true/p
         false/p
@@ -153,6 +181,7 @@
          number-literal
          boolean-literal
          address-literal
+         binary-op
          key-value
          field-access
          lam

@@ -17,8 +17,8 @@
 
 (define-tokens common-tokens (IDENTIFIER OPERATOR NUMBER ADDRESS STRING))
 (define-empty-tokens keyword-tokens (MFN SFN MAP FILTER REDUCE TRUE FALSE SOURCE))
-(define-empty-tokens operator-tokens
-                     (PLUS MINUS MUL DIV EQ NOT-EQ LT GT LTE GTE AND OR NOT PIPE ASSIGNMENT))
+(define-tokens operator-tokens
+               (PLUS MINUS MUL DIV EQ NOT-EQ LT GT LTE GTE AND OR NOT PIPE ASSIGNMENT))
 (define-empty-tokens punct-tokens
                      (LPAREN RPAREN
                              LCURLY
@@ -53,21 +53,21 @@
 
 (define (string->operator str)
   (match str
-    ["+" token-PLUS]
-    ["-" token-MINUS]
-    ["*" token-MUL]
-    ["/" token-DIV]
-    ["==" token-EQ]
-    ["!=" token-NOT-EQ]
-    ["<" token-LT]
-    [">" token-GT]
-    ["<=" token-LTE]
-    [">=" token-GTE]
-    ["&&" token-AND]
-    ["||" token-OR]
-    ["!" token-NOT]
-    ["|>" token-PIPE]
-    ["=" token-ASSIGNMENT]))
+    ["+" (token-PLUS str)]
+    ["-" (token-MINUS str)]
+    ["*" (token-MUL str)]
+    ["/" (token-DIV str)]
+    ["==" (token-EQ str)]
+    ["!=" (token-NOT-EQ str)]
+    ["<" (token-LT str)]
+    [">" (token-GT str)]
+    ["<=" (token-LTE str)]
+    [">=" (token-GTE str)]
+    ["&&" (token-AND str)]
+    ["||" (token-OR str)]
+    ["!" (token-NOT str)]
+    ["|>" (token-PIPE str)]
+    ["=" (token-ASSIGNMENT str)]))
 
 (define (string->keyword-token str)
   (match str
@@ -88,7 +88,7 @@
                  [whitespace? (return-without-pos (streamline-lexer input-port))] ;remove whitespace
                  [keyword? ((string->keyword-token lexeme))]
                  [identifier? (token-IDENTIFIER lexeme)]
-                 [operator? ((string->operator lexeme))]
+                 [operator? (string->operator lexeme)]
                  ;; literals
                  [address? (token-ADDRESS lexeme)]
                  [num? (token-NUMBER lexeme)]

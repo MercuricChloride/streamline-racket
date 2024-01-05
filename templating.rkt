@@ -152,6 +152,9 @@ map_literal!{
 \"{{key}}\"; {{val}}
 " (hash "key" key "val" val)))
 
+(define (binary-op/gen lh op rh)
+  (format "(Into::<SolidityType>::into(~a) ~a ~a).to_json_value()" lh op rh))
+
 (define (write-string-to-file string filename)
   (with-output-to-file filename (lambda () (pretty-display string)) #:exists 'replace))
 
@@ -162,6 +165,7 @@ map_literal!{
     [(map-literal kvs) (map-literal/gen (map generate-code kvs))]
     [(key-value key val) (gen key-value/gen key val)]
     [(identifier name) (gen symbol->string name)]
+    [(binary-op lh op rh) (gen binary-op/gen lh op rh)]
     [(string-literal value) (format "sol_type!(String, \"~a\")" value)]
     [(number-literal value) (format "sol_type!(Uint, \"~a\")" value)]
     [(boolean-literal value) (format "sol_type!(Boolean, \"~a\")" (if value "1" "0"))]

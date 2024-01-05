@@ -8,7 +8,10 @@ mfn baycTransfers = mapEvents
     |> map (transfer) => {
        epicToken: transfer._tokenId,
        greeting: "Hello!",
-       num: 42,
+       num: 42 + 15 + transfer._tokenId,
+       divTest: 42 / 15,
+       mulTest: 42 * 15,
+       subTest: 42 - 15,
        foo: true,
        add: 0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D
     };
