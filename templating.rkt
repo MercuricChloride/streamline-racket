@@ -175,6 +175,10 @@ map_literal!{
      (format
       "SolidityType::Tuple(vec![~a].into_iter().map(|item| item.into()).collect()).to_json_value()"
       (string-join (map generate-code vals) ","))]
+    [(list-literal vals)
+     (format
+      "SolidityType::List(vec![~a].into_iter().map(|item| item.into()).collect()).to_json_value()"
+      (string-join (map generate-code vals) ","))]
     [(mfn name inputs body) (gen mfn/gen name inputs body)]
     [(sfn name inputs body) (gen sfn/gen name inputs body)]
     [(lam fn-args exprs) (gen lam/gen fn-args exprs)]
@@ -201,6 +205,7 @@ map_literal!{
   ; lex the file
   (define tokenized-input (tokenize source-port))
   (println "Tokenized Input")
+  (pretty-display tokenized-input)
 
   ; parse the file
   (define parsed-input (parse-file! tokenized-input))

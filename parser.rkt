@@ -21,6 +21,7 @@
 (struct boolean-literal (val) #:prefab) ; true / false
 (struct address-literal (val) #:prefab) ; 0xabc123...
 (struct tuple-literal (vals) #:prefab) ; (1, 2, 3)
+(struct list-literal (vals) #:prefab) ; [1, 2, 3]
 (struct binary-op (lh op rh) #:prefab) ; 42 + 5
 (struct key-value (key value) #:prefab) ; foo: bar,
 (struct field-access (lh fields) #:prefab) ; foo.bar or foo.bar.baz
@@ -45,11 +46,22 @@
       [vals <- (many+/p (lazy/p expression/p) #:sep (token/p 'COMMA))]
       (token/p 'RPAREN)
       (pure (tuple-literal vals))))
+(define list-literal/p
+  (do (token/p 'LBRACKET)
+      [vals <- (many+/p (lazy/p expression/p) #:sep (token/p 'COMMA))]
+      (token/p 'RBRACKET)
+      (pure (list-literal vals))))
 
 (define literal/p
   (do [literal
        <-
-       (or/p true/p false/p string-literal/p number-literal/p address-literal/p tuple-literal/p)]
+       (or/p true/p
+             false/p
+             string-literal/p
+             number-literal/p
+             address-literal/p
+             tuple-literal/p
+             list-literal/p)]
       (pure literal)))
 
 (define ident/p (do [ident <- (token/p 'IDENTIFIER)] (pure ident)))
@@ -61,9 +73,9 @@
     [_ (list rh)]))
 
 (define field-access/p
-  (do [lh <- ident/p]
+  (do [lh <- (or/p ident/p literal/p)]
       (token/p 'DOT)
-      (rh <- (or/p (try/p field-access/p) ident/p))
+      (rh <- (or/p (try/p field-access/p) ident/p number-literal/p))
       (pure (field-access lh (flatten-field-access rh)))))
 
 (define key-value/p
@@ -121,6 +133,7 @@
         number-literal/p
         address-literal/p
         tuple-literal/p
+        list-literal/p
         (try/p field-access/p)
         ident/p))
 
@@ -203,6 +216,7 @@
          boolean-literal
          address-literal
          tuple-literal
+         list-literal
          binary-op
          key-value
          field-access
