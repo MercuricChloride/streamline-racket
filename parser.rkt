@@ -20,6 +20,7 @@
 (struct number-literal (num) #:prefab) ; 42
 (struct boolean-literal (val) #:prefab) ; true / false
 (struct address-literal (val) #:prefab) ; 0xabc123...
+(struct tuple-literal (vals) #:prefab) ; (1, 2, 3)
 (struct binary-op (lh op rh) #:prefab) ; 42 + 5
 (struct key-value (key value) #:prefab) ; foo: bar,
 (struct field-access (lh fields) #:prefab) ; foo.bar or foo.bar.baz
@@ -39,8 +40,16 @@
 (define string-literal/p (do (str <- (token/p 'STRING)) (pure (string-literal str))))
 (define number-literal/p (do (num <- (token/p 'NUMBER)) (pure (number-literal num))))
 (define address-literal/p (do (addr <- (token/p 'ADDRESS)) (pure (address-literal addr))))
+(define tuple-literal/p
+  (do (token/p 'LPAREN)
+      [vals <- (many+/p (lazy/p expression/p) #:sep (token/p 'COMMA))]
+      (token/p 'RPAREN)
+      (pure (tuple-literal vals))))
+
 (define literal/p
-  (do [literal <- (or/p true/p false/p string-literal/p number-literal/p address-literal/p)]
+  (do [literal
+       <-
+       (or/p true/p false/p string-literal/p number-literal/p address-literal/p tuple-literal/p)]
       (pure literal)))
 
 (define ident/p (do [ident <- (token/p 'IDENTIFIER)] (pure ident)))
@@ -111,6 +120,7 @@
         string-literal/p
         number-literal/p
         address-literal/p
+        tuple-literal/p
         (try/p field-access/p)
         ident/p))
 
@@ -192,6 +202,7 @@
          number-literal
          boolean-literal
          address-literal
+         tuple-literal
          binary-op
          key-value
          field-access
