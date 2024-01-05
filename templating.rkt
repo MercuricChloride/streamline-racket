@@ -153,7 +153,7 @@ map_literal!{
 " (hash "key" key "val" val)))
 
 (define (binary-op/gen lh op rh)
-  (format "(Into::<SolidityType>::into(~a) ~a ~a).to_json_value()" lh op rh))
+  (format "Into::<SolidityJsonValue>::into((Into::<SolidityType>::into(~a) ~a ~a))" lh op rh))
 
 (define (write-string-to-file string filename)
   (with-output-to-file filename (lambda () (pretty-display string)) #:exists 'replace))
