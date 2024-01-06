@@ -21,10 +21,10 @@ mfn baycTransfers = mapEvents
        addrCompare: 0x5Af0D9827E0c53E4799BB226655A1de152A425a5 == 0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D,
        baycEqual: 0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D == 0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D,
        tuple: (1, 2, 3),
-       list: [1, 2, 3],
+       list: [1, 2, [3,4,[5,6]]],
        listAccess: [1, 2, 3].0
     };
-    |> map (randoMap) => randoMap.list.0;
+    |> map (randoMap) => randoMap.list.2.2.0;
 
 mfn miladyTransfers = [mapEvents, baycTransfers]
     |> (events, bayc) => events.milady.Transfer;
