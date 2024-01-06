@@ -132,9 +132,9 @@
         string-literal/p
         number-literal/p
         address-literal/p
+        (try/p field-access/p)
         tuple-literal/p
         list-literal/p
-        (try/p field-access/p)
         ident/p))
 
 (define hof/p (or/p (token/p 'MAP) (token/p 'FILTER) (token/p 'REDUCE)))

@@ -156,6 +156,17 @@ map_literal!{
 (define (binary-op/gen lh op rh)
   (format "Into::<SolidityJsonValue>::into((Into::<SolidityType>::into(~a) ~a ~a))" lh op rh))
 
+(define (field-access/gen lh rhs)
+  (format "map_access!(&~a,~a)"
+          lh
+          (string-join (map (lambda (e)
+                              (let ([key (match e
+                                           [(number-literal val) val]
+                                           [_ e])])
+                                (format "\"~a\"" key)))
+                            rhs)
+                       ",")))
+
 (define (write-string-to-file string filename)
   (with-output-to-file filename (lambda () (pretty-display string)) #:exists 'replace))
 
@@ -184,13 +195,7 @@ map_literal!{
     [(lam fn-args exprs) (gen lam/gen fn-args exprs)]
     [(hof kind (lam args body)) (gen hof/gen kind args body)]
     [(pipeline functors) (string-join (map generate-code functors) "\n")]
-    [(field-access lh rhs)
-     (gen (lambda (lh rhs)
-            (format "map_access!(&~a,~a)"
-                    lh
-                    (string-join (map (lambda (e) (format "\"~a\"" e)) rhs) ",")))
-          lh
-          rhs)]
+    [(field-access lh rhs) (gen field-access/gen lh rhs)]
     [(? string?) node]
     [(? number?) node]
     [(list item ...)
@@ -205,7 +210,6 @@ map_literal!{
   ; lex the file
   (define tokenized-input (tokenize source-port))
   (println "Tokenized Input")
-  (pretty-display tokenized-input)
 
   ; parse the file
   (define parsed-input (parse-file! tokenized-input))

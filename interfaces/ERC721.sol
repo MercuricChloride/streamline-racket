@@ -3,6 +3,7 @@ interface ERC721 /* is ERC165 */ {
 
     event Approval(address indexed _owner, address indexed _approved, uint256 indexed _tokenId);
 
+    // The event is not a Submitted bid
     event ApprovalForAll(address indexed _owner, address indexed _operator, bool _approved);
 
     function balanceOf(address _owner) external view returns (uint256);
