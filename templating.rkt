@@ -67,11 +67,27 @@ loose_sol! {
          [name (regexp-match* #rx"(?:interface|contract) ([a-zA-Z$_][a-zA-Z0-9$_]*)"
                               source-code
                               #:match-select cadr)]
+         [replaced-source (string-replace source-code
+                                          "contract"
+                                          "#[derive(Serialize, Deserialize, Debug)]\ncontract"
+                                          #:all? true)]
+         [replaced-source (string-replace replaced-source
+                                          "interface"
+                                          "#[derive(Serialize, Deserialize, Debug)]\ninterface"
+                                          #:all? true)]
+         [replaced-source (string-replace replaced-source
+                                          "struct"
+                                          "#[derive(Serialize, Deserialize, Debug)]\nstruct"
+                                          #:all? true)]
+         [replaced-source (string-replace replaced-source
+                                          "enum"
+                                          "#[derive(Serialize, Deserialize, Debug)]\nenum"
+                                          #:all? true)]
          [sol-macro (expand "
-loose_sol! {
+sol! {
   {{solidity}}
 }
-" (hash "solidity" source-code))])
+" (hash "solidity" replaced-source))])
     (source-data sol-macro (first name) (flatten events))))
 
 (define (mfn/gen name inputs body)
