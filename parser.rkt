@@ -13,7 +13,7 @@
 (struct identifier (name) #:prefab) ; foo
 (struct type (name) #:prefab) ; foo
 (struct typed-field (name type) #:prefab) ; id: address
-(struct rpc-call (fn-access typed-args) #:prefab) ; ERC721::#ownerOf(id: address)#
+(struct rpc-call (instance-name fn-name args) #:prefab) ; ERC721.#ownerOf(id: address)#
 
 (struct map-literal (kvs) #:prefab) ; { ... }
 (struct string-literal (str) #:prefab) ; "hi"
@@ -114,14 +114,17 @@
 (define typed-field/p
   (do (ident <- ident/p) (token/p 'COLON) (type <- type/p) (pure (typed-field ident type))))
 
+; TODO I need to add loading instances at an address
 (define rpc-call/p
   (do (token/p 'HASH)
-      (fn-access <- (or/p field-access/p ident/p))
+      (instance-name <- ident/p)
+      (token/p 'DOT)
+      (fn-name <- ident/p)
       (token/p 'LPAREN)
-      (typed-args <- (many/p typed-field/p))
+      (args <- (many/p expression/p))
       (token/p 'RPAREN)
       (token/p 'HASH)
-      (pure (rpc-call fn-access typed-args))))
+      (pure (rpc-call instance-name fn-name args))))
 
 (define expression/p
   (or/p (try/p binary-op/p)

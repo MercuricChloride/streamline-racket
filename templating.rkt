@@ -183,6 +183,19 @@ map_literal!{
                             rhs)
                        ",")))
 
+(define (rpc-call/gen name fn args)
+  (expand-string
+   "
+{{name}}!({{fn}}Call, {{args}})
+"
+   (hash "name"
+         name
+         "fn"
+         fn
+         "args"
+         (string-join (map (lambda (arg) (format "SolidityType::from(~a)" (generate-code arg))) args)
+                      ","))))
+
 (define (write-string-to-file string filename)
   (with-output-to-file filename (lambda () (pretty-display string)) #:exists 'replace))
 
@@ -190,6 +203,7 @@ map_literal!{
   (match node
     [(source-def path) (gen source-def/gen path)]
     [(instance-def name identifier address) (gen instance-def/gen name identifier address)]
+    [(rpc-call instance fn args) (gen rpc-call/gen instance fn args)]
     [(map-literal kvs) (map-literal/gen (map generate-code kvs))]
     [(key-value key val) (gen key-value/gen key val)]
     [(identifier name) (gen symbol->string name)]
@@ -254,6 +268,46 @@ map_literal!{
   ; Creates a hash map from an abi instance -> all of the event names
   (define source-hash (make-hash (map (lambda (item) (rest item)) source-defs)))
 
+  (define (instance-macro instance)
+    (match-let ([(instance-def name abi address) instance])
+      (expand-string
+       "
+macro_rules! {{name}} {
+    ($function: ident,  $($arg: expr),*) => { {
+        let func_call = {{abi}}::$function::from((
+            $($arg.into(),)*
+        ));
+
+        let calls = vec![RpcCall{
+            to_addr: address!(\"
+{{address}}
+       \").to_vec(),
+            data: func_call.abi_encode(),
+        }];
+        let rpc_calls = RpcCalls{ calls };
+        let responses = substreams_ethereum::rpc::eth_call(&rpc_calls).responses;
+        let responses = responses.into_iter()
+                                 .map(|response| {{abi}}::$function::abi_decode_returns(&response.raw, false).expect(\"
+       Couldn
+       't
+       decode
+       return
+       value
+       of
+       rpc
+       call
+       \"))
+                                 .map(|return_value| serde_json::to_value(return_value).unwrap())
+                                 .map(|value| SolidityJsonValue::guess_json_value(&value).unwrap())
+                                 .collect::<Vec<SolidityJsonValue>>();
+        responses.get(0).unwrap().clone()
+    } };
+}
+"
+       (hash "name" name "abi" abi "address" (string-replace address "0x" "" #:all? #f)))))
+
+  (define instance-macros (string-join (map instance-macro contract-instances) "\n"))
+
   (define (instance-events instance)
     (match-let ([(instance-def name abi address) instance])
       (let* ([events (hash-ref source-hash abi)]
@@ -300,7 +354,7 @@ fn map_events(blk: eth::Block) -> Option<prost_wkt_types::Struct> {
                                                      [(instance-def _ _ _) false]
                                                      [_ true]))
                                                  parsed-input)))])
-      (string-append source-def-code instances-def-code module-code)))
+      (string-append instance-macros source-def-code instances-def-code module-code)))
   (println "Generated Code")
   (write-string-to-file generated-code "/tmp/streamline.rs")
   (println "Wrote output code"))
