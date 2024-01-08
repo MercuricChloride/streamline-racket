@@ -1,6 +1,7 @@
 #lang racket
 
 (require dali)
+(require yaml)
 (require "./lexer.rkt")
 (require "./parser.rkt")
 
@@ -154,22 +155,6 @@ fn {{name}}({{inputs}}, s: StoreSetProto<prost_wkt_types::Struct>) {
          "initial-value"
          initial-value)))
 
-(define (sfn/gen name inputs body)
-  (define -inputs
-    (string-join (map (lambda (input) (format "~a: prost_wkt_types::Struct" input)) inputs) ","))
-  (define format-inputs (format "format_inputs!(~a);" (string-join inputs ",")))
-  (expand
-   "
-#[substreams::handlers::map]
-fn {{name}}({{inputs}}) -> Option<prost_wkt_types::Struct> {
-    {{format-inputs}}
-    with_map! {output_map,
-      {{body}}
-   }
-}
-"
-   (hash "name" name "inputs" -inputs "format-inputs" format-inputs "body" body)))
-
 (define (fmt-args args)
   (string-join (map (lambda (arg) (format "~a: Map<String, serde_json::Value>" arg)) args) ","))
 
@@ -264,6 +249,9 @@ map_literal!{
      (string? item)
      node]))
 
+(define (generate-yaml modules)
+  (yaml->string (hash "modules" modules)))
+
 (define (generate-streamline-file path)
   ; open a port to the source
   (define source-port (open-input-file path))
@@ -274,7 +262,14 @@ map_literal!{
   (println "Tokenized Input")
 
   ; parse the file
-  (define parsed-input (parse-file! tokenized-input))
+  (define parsed-result (parse-file! tokenized-input))
+  (define modules (hash-ref parsed-result "modules"))
+  (pretty-display modules)
+  (define edges (hash-ref parsed-result "edges"))
+  (pretty-display edges)
+  (define nodes (hash-ref parsed-result "nodes"))
+  (pretty-display (yaml->string nodes))
+  (define parsed-input (hash-ref parsed-result "parsed-file"))
   (println "Parsed Input")
 
   ; gather the instances

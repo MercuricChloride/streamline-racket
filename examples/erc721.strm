@@ -5,7 +5,7 @@ bayc = ERC721(0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D);
 milady = ERC721(0x5Af0D9827E0c53E4799BB226655A1de152A425a5);
 blur = Blur(0x000000000000Ad05Ccc4F10045630fb830B95127);
 
-mfn baycTransfers = mapEvents
+mfn baycTransfers = EVENTS
     |> (events) => events.bayc.Transfer;
     |> map (transfer) => {
        epicToken: transfer._tokenId,
@@ -28,7 +28,7 @@ mfn baycTransfers = mapEvents
        rpcTest: #milady.ownerOf(transfer._tokenId)#
     };
 
-mfn miladyTransfers = mapEvents
+mfn miladyTransfers = [EVENTS, baycTransfers]
     |> (events) => events.blur.OrdersMatched;
     |> map (order) => {
        maker: order.maker,

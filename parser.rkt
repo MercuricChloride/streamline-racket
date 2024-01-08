@@ -8,6 +8,15 @@
          dali
          "./lexer.rkt")
 
+;; PARAMETERS
+(define declared-modules
+  (make-parser-parameter
+   '(("MFN" . "EVENTS") ("SOURCE" .
+                                  "BLOCK")))) ; This is a list of pairs of (MODULE_TYPE . MODULE_NAME)
+(define declared-edges
+  (make-parser-parameter
+   '(("BLOCK" . "EVENTS")))) ; This is a list of edges from module name -> module name
+
 ;; STRUCTS
 (struct primitive-value (value) #:prefab) ; IE Boolean etc
 (struct identifier (name) #:prefab) ; foo
@@ -169,19 +178,54 @@
 (define module-inputs/p
   (do (inputs <- (or/p (try/p many-module-inputs/p) single-module-input/p)) (pure inputs)))
 
+(define module-name/p
+  (do (name <-
+            (guard/p ident/p
+                     (lambda (name) (not (equal? name "EVENTS")))
+                     "EVENTS is a restricted module name. Please choose a different name!"))
+      (pure name)))
+
 (define mfn/p
   (do (token/p 'MFN)
-      [name <- ident/p]
+      [modules <- (declared-modules)]
+      [edges <- (declared-edges)]
+      [name
+       <-
+       (guard/p module-name/p
+                (lambda (name) (not (member name (stream->list (map cdr modules)))))
+                "This module name already has been defined!")]
+      (declared-modules (cons (cons "MFN" name) modules))
       (token/p 'ASSIGNMENT)
-      [inputs <- module-inputs/p]
+      [inputs
+       <-
+       (guard/p module-inputs/p
+                (lambda (inputs)
+                  (for/and ([input inputs])
+                    (member input (stream->list (map cdr modules)))))
+                "This module name is undefined! Please use a defined module for inputs to a module!")]
+      (declared-edges (stream-append edges (map (lambda (input) (cons input name)) inputs)))
       [pipeline <- pipeline/p]
       (pure (mfn name inputs pipeline))))
 
 (define sfn/p
   (do (token/p 'SFN)
-      [name <- (token/p 'IDENTIFIER)]
+      [modules <- (declared-modules)]
+      [edges <- (declared-edges)]
+      [name
+       <-
+       (guard/p ident/p
+                (lambda (name) (not (member name modules)))
+                "This module name already has been defined!")]
+      (declared-modules (cons (cons "SFN" name) modules))
       (token/p 'ASSIGNMENT)
-      [inputs <- module-inputs/p]
+      [inputs
+       <-
+       (guard/p module-inputs/p
+                (lambda (inputs)
+                  (for/and ([input inputs])
+                    (member input modules)))
+                "A defined module! Please use a defined module for inputs to a module!")]
+      (declared-edges (stream-append edges (map (lambda (input) (cons input name)) inputs)))
       [pipeline <- pipeline/p]
       (pure (sfn name inputs pipeline))))
 
@@ -201,10 +245,69 @@
       (pure (instance-def name abi-type address))))
 
 (define streamline/p
-  (do [cells <- (many/p (or/p module-def/p source-def/p instance-def/p))] (pure cells)))
+  (do [cells <- (many/p (or/p module-def/p source-def/p instance-def/p))]
+      [modules <- (declared-modules)]
+      [edges <- (declared-edges)]
+      (pure (list cells modules (stream->list edges)))))
+
+(define (find-module name modules)
+  (define filtered (filter (lambda (mod) (equal? name (cdr mod))) (stream->list modules)))
+  (if (empty? filtered) false (first filtered)))
+
+(define (module-input->yaml input)
+  (define kind (car input))
+  (define name (cdr input))
+
+  (define yaml (make-hash))
+
+  (match kind
+    ["MFN" (hash-set! yaml "map" name)]
+    ["SFN" (hash-set! yaml "store" name)]
+    ["SOURCE" (hash-set! yaml "source" "sf.ethereum.type.v2.Block")])
+  yaml)
+
+(define (module->yaml mod inputs)
+  (if (equal? (car mod) "SOURCE")
+      false
+      (let ([output (hash "type" "proto:google.protobuf.Struct")]
+            [store? (match (car mod)
+                      ["MFN" false]
+                      ["SFN" true])]
+            [yaml (make-hash)])
+
+        (hash-set! yaml "name" (cdr mod))
+        (hash-set! yaml "kind" (if store? "store" "map"))
+        (hash-set! yaml "inputs" (stream->list (map module-input->yaml inputs)))
+
+        (when (not store?) ; only map modules have outputs
+          (hash-set! yaml "output" output))
+        (when store?
+          (hash-set! yaml "valueType" "proto:google.protobuf.Struct"))
+
+        yaml)))
 
 (define (parse-file! tokenized-input)
-  (parse-result! (parse-tokens streamline/p tokenized-input)))
+  (match (parse-result! (parse-tokens streamline/p tokenized-input))
+    [(list parsed-file modules edges)
+     (begin
+       (define nodes
+         (filter-map
+          (lambda (mod)
+            (define inputs
+              (filter-map (lambda (edge)
+                            (define module-name (cdr mod))
+                            (if (equal? (cdr edge) module-name) (find-module (car edge) modules) #f))
+                          edges))
+            (module->yaml mod (stream->list inputs)))
+          modules))
+       (hash "parsed-file"
+             parsed-file
+             "modules"
+             modules
+             "edges"
+             edges
+             "nodes"
+             (stream->list nodes)))]))
 
 (provide parse-file!
          primitive-value
