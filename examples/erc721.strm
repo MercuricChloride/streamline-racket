@@ -31,10 +31,7 @@ mfn baycTransfers = mapEvents
 mfn miladyTransfers = mapEvents
     |> (events) => events.blur.OrdersMatched;
     |> map (order) => {
-       whoMadeIt: order.maker,
-       whoTookIt: order.taker,
-       somethingNiceToSay: {
-           sure: "You look good today!",
-           nah: "You look like shit today!"
-       }
+       maker: order.maker,
+       taker: order.taker,
+       epic: order.sellHash
     };

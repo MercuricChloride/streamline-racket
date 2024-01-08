@@ -125,6 +125,38 @@ fn {{name}}({{inputs}}) -> Option<prost_wkt_types::Struct> {
 (define (sfn/gen name inputs body)
   (define -inputs
     (string-join (map (lambda (input) (format "~a: prost_wkt_types::Struct" input)) inputs) ","))
+
+  (define initial-value
+    (if (= (length inputs) 1)
+        (format "let output_map = ~a;" (first inputs))
+        (format "let output_map = (~a);" (string-join inputs ", "))))
+
+  (define format-inputs (format "format_inputs!(~a);" (string-join inputs ",")))
+  (expand
+   "
+#[substreams::handlers::store]
+fn {{name}}({{inputs}}, s: StoreSetProto<prost_wkt_types::Struct>) {
+    {{format-inputs}}
+    with_map! {output_map,
+      {{initial-value}}
+      {{body}}
+   }
+}
+"
+   (hash "name"
+         name
+         "inputs"
+         -inputs
+         "format-inputs"
+         format-inputs
+         "body"
+         body
+         "initial-value"
+         initial-value)))
+
+(define (sfn/gen name inputs body)
+  (define -inputs
+    (string-join (map (lambda (input) (format "~a: prost_wkt_types::Struct" input)) inputs) ","))
   (define format-inputs (format "format_inputs!(~a);" (string-join inputs ",")))
   (expand
    "
