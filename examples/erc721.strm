@@ -28,8 +28,8 @@ mfn baycTransfers = EVENTS
        rpcTest: #milady.ownerOf(transfer._tokenId)#
     };
 
-mfn miladyTransfers = [EVENTS, baycTransfers]
-    |> (events) => events.blur.OrdersMatched;
+sfn blurOrders = [EVENTS, baycTransfers]
+    |> (events, transfers) => events.blur.OrdersMatched;
     |> map (order) => {
        maker: order.maker,
        taker: order.taker,

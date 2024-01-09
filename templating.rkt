@@ -9,6 +9,35 @@
 ; So we just set the escape-replacements parameter to be effectively nothing. (it checks for an empty list)
 (escape-replacements '(("&" . "&")))
 
+(define streamline-path "/home/alexandergusev/.streamline/")
+
+(define (yaml-string name)
+  (expand-string
+   "
+specVersion: v0.1.0
+package:
+  name: {{name}}
+  version: v0.1.0
+
+imports:
+  sql: https://github.com/streamingfast/substreams-sink-sql/releases/download/protodefs-v1.0.2/substreams-sink-sql-protodefs-v1.0.2.spkg
+  database_change: https://github.com/streamingfast/substreams-sink-database-changes/releases/download/v1.2.1/substreams-database-change-v1.2.1.spkg
+
+protobuf:
+  files:
+   - struct.proto
+  importPaths:
+    - ./proto
+
+network: mainnet
+
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ./target/wasm32-unknown-unknown/release/streamline.wasm
+"
+   (hash "name" name)))
+
 (define (expand str kvs)
   (expand-string str kvs))
 
@@ -16,9 +45,6 @@
 
 ;; Data for generating contract source code
 (struct source-data (sol-macro name events))
-
-(define (fn-inputs input)
-  (expand "{{#inputs}} {{ident}}: {{type}} {{/inputs}}" input))
 
 (define-syntax-rule (source path)
   (let* ([source-code (port->string (open-input-file path))]
@@ -138,10 +164,8 @@ fn {{name}}({{inputs}}) -> Option<prost_wkt_types::Struct> {
 #[substreams::handlers::store]
 fn {{name}}({{inputs}}, s: StoreSetProto<prost_wkt_types::Struct>) {
     {{format-inputs}}
-    with_map! {output_map,
-      {{initial-value}}
-      {{body}}
-   }
+    {{initial-value}}
+    {{body}}
 }
 "
    (hash "name"
@@ -222,6 +246,7 @@ map_literal!{
     [(instance-def name identifier address) (gen instance-def/gen name identifier address)]
     [(rpc-call instance fn args) (gen rpc-call/gen instance fn args)]
     [(map-literal kvs) (map-literal/gen (map generate-code kvs))]
+
     [(key-value key val) (gen key-value/gen key val)]
     [(identifier name) (gen symbol->string name)]
     [(binary-op lh op rh) (gen binary-op/gen lh op rh)]
@@ -249,10 +274,14 @@ map_literal!{
      (string? item)
      node]))
 
-(define (generate-yaml modules)
-  (yaml->string (hash "modules" modules)))
+(define (generate-yaml name modules)
+  (define yaml-path (string-append streamline-path "substreams.yaml"))
+  (write-string-to-file (string-append (yaml-string name) (yaml->string (hash "modules" modules)))
+                        yaml-path))
 
 (define (generate-streamline-file path)
+  (define streamline-name (string-replace (last (string-split path "/")) ".strm" ""))
+  (pretty-display (string-append "Generating Streamline File: " streamline-name))
   ; open a port to the source
   (define source-port (open-input-file path))
   (println "Opened source port")
@@ -264,11 +293,9 @@ map_literal!{
   ; parse the file
   (define parsed-result (parse-file! tokenized-input))
   (define modules (hash-ref parsed-result "modules"))
-  (pretty-display modules)
   (define edges (hash-ref parsed-result "edges"))
-  (pretty-display edges)
   (define nodes (hash-ref parsed-result "nodes"))
-  (pretty-display (yaml->string nodes))
+  (generate-yaml streamline-name nodes)
   (define parsed-input (hash-ref parsed-result "parsed-file"))
   (println "Parsed Input")
 
@@ -347,7 +374,7 @@ macro_rules! {{name}} {
     (format
      "
 #[substreams::handlers::map]
-fn map_events(blk: eth::Block) -> Option<prost_wkt_types::Struct> {
+fn EVENTS(blk: eth::Block) -> Option<prost_wkt_types::Struct> {
   with_map!{output_map,
   ~a
   }
@@ -383,7 +410,7 @@ fn map_events(blk: eth::Block) -> Option<prost_wkt_types::Struct> {
                                                  parsed-input)))])
       (string-append instance-macros source-def-code instances-def-code module-code)))
   (println "Generated Code")
-  (write-string-to-file generated-code "/tmp/streamline.rs")
+  (write-string-to-file generated-code (string-append streamline-path "src/streamline.rs"))
   (println "Wrote output code"))
 
 (generate-streamline-file "examples/erc721.strm")

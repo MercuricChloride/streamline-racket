@@ -223,8 +223,8 @@
        (guard/p module-inputs/p
                 (lambda (inputs)
                   (for/and ([input inputs])
-                    (member input modules)))
-                "A defined module! Please use a defined module for inputs to a module!")]
+                    (member input (stream->list (map cdr modules)))))
+                "This module name is undefined! Please use a defined module for inputs to a module!")]
       (declared-edges (stream-append edges (map (lambda (input) (cons input name)) inputs)))
       [pipeline <- pipeline/p]
       (pure (sfn name inputs pipeline))))
