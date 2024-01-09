@@ -9,7 +9,8 @@
 ; So we just set the escape-replacements parameter to be effectively nothing. (it checks for an empty list)
 (escape-replacements '(("&" . "&")))
 
-(define streamline-path "/home/alexandergusev/.streamline/")
+(define streamline-path
+  (string-replace (with-output-to-string (lambda () (system "echo $HOME/.streamline/"))) "\n" ""))
 
 (define (yaml-string name)
   (expand-string
@@ -411,9 +412,11 @@ fn EVENTS(blk: eth::Block) -> Option<prost_wkt_types::Struct> {
       (string-append instance-macros source-def-code instances-def-code module-code)))
   (println "Generated Code")
   (write-string-to-file generated-code (string-append streamline-path "src/streamline.rs"))
-  (println "Wrote output code"))
+  (println "Wrote output code")
 
-(generate-streamline-file "examples/erc721.strm")
+  (pretty-display (with-output-to-string (lambda ()
+                                           (system (format "cd ~a && make build" streamline-path)))))
+  (println "Compiled Rust Code"))
 
-(pretty-display (with-output-to-string (lambda ()
-                                         (system (format "cd ~a && make build" streamline-path)))))
+(provide generate-streamline-file
+         streamline-path)

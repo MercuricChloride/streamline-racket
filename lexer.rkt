@@ -100,7 +100,5 @@
   (port-count-lines! port)
   (let ([token (streamline-lexer port)]) (if (equal? 'EOF token) '() (cons token (tokenize port)))))
 
-(define tokenized-input (tokenize (open-input-file "./examples/erc721.strm")))
 ;tokenized-input
-(provide tokenize
-         tokenized-input)
+(provide tokenize)
