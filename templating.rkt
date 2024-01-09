@@ -181,11 +181,11 @@ fn {{name}}({{inputs}}, s: StoreSetProto<prost_wkt_types::Struct>) {
          initial-value)))
 
 (define (fmt-args args)
-  (string-join (map (lambda (arg) (format "~a: Map<String, serde_json::Value>" arg)) args) ","))
+  (string-join (map (lambda (_) "Map<String, serde_json::Value>") args) ","))
 
 (define (lam/gen fn-args exprs)
   (define -args (string-join fn-args ","))
-  (define arg-types (string-join (map (lambda (_) "Map<String, serde_json::Value>") fn-args) ","))
+  (define arg-types (fmt-args fn-args))
   (expand "
 let output_map = (|({{args}}): ({{arg-types}})| { {{exprs}} })(output_map);
 "

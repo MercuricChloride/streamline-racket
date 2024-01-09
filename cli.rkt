@@ -46,6 +46,77 @@ EOF
 EOF
   )
 
+(define skull
+  #<<EOF
+                       uuuuuuuuuuuuuuuuuuuuu.
+                   .u$$$$$$$$$$$$$$$$$$$$$$$$$$W.
+                 u$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$Wu.
+               $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$i
+              $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+         `    $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+           .i$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$i
+           $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$W
+          .$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$W
+         .$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$i
+         #$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$.
+         W$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+$u       #$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$~
+$#      `"$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+$i        $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+$$        #$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+$$         $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+#$.        $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$#
+ $$      $iW$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$!
+ $$i      $$$$$$$#"" `"""#$$$$$$$$$$$$$$$$$#""""""#$$$$$$$$$$$$$$$W
+ #$$W    `$$$#"            "       !$$$$$`           `"#$$$$$$$$$$#
+  $$$     ``                 ! !iuW$$$$$                 #$$$$$$$#
+  #$$    $u                  $   $$$$$$$                  $$$$$$$~
+   "#    #$$i.               #   $$$$$$$.                 `$$$$$$
+          $$$$$i.                """#$$$$i.               .$$$$#
+          $$$$$$$$!         .   `    $$$$$$$$$i           $$$$$
+          `$$$$$  $iWW   .uW`        #$$$$$$$$$W.       .$$$$$$#
+            "#$$$$$$$$$$$$#`          $$$$$$$$$$$iWiuuuW$$$$$$$$W
+               !#""    ""             `$$$$$$$##$$$$$$$$$$$$$$$$
+          i$$$$    .                   !$$$$$$ .$$$$$$$$$$$$$$$#
+         $$$$$$$$$$`                    $$$$$$$$$Wi$$$$$$#"#$$`
+         #$$$$$$$$$W.                   $$$$$$$$$$$#   ``
+          `$$$$##$$$$!       i$u.  $. .i$$$$$$$$$#""
+             "     `#W       $$$$$$$$$$$$$$$$$$$`      u$#
+                            W$$$$$$$$$$$$$$$$$$      $$$$W
+                            $$`!$$$##$$$$``$$$$      $$$$!
+                           i$" $$$$  $$#"`  """     W$$$$
+                                                   W$$$$!
+                      uW$$  uu  uu.  $$$  $$$Wu#   $$$$$$
+                     ~$$$$iu$$iu$$$uW$$! $$$$$$i .W$$$$$$
+             ..  !   "#$$$$$$$$$$##$$$$$$$$$$$$$$$$$$$$#"
+             $$W  $     "#$$$$$$$iW$$$$$$$$$$$$$$$$$$$$$W
+             $#`   `       ""#$$$$$$$$$$$$$$$$$$$$$$$$$$$
+                              !$$$$$$$$$$$$$$$$$$$$$#`
+                              $$$$$$$$$$$$$$$$$$$$$$!
+                            $$$$$$$$$$$$$$$$$$$$$$$`
+                             $$$$$$$$$$$$$$$$$$$$"
+
+   _____ _______ _____  ______          __  __ _      _____ _   _ ______
+  / ____|__   __|  __ \|  ____|   /\   |  \/  | |    |_   _| \ | |  ____|
+ | (___    | |  | |__) | |__     /  \  | \  / | |      | | |  \| | |__
+  \___ \   | |  |  _  /|  __|   / /\ \ | |\/| | |      | | | . ` |  __|
+  ____) |  | |  | | \ \| |____ / ____ \| |  | | |____ _| |_| |\  | |____
+ |_____/ _ |_|_ |_|__\_\______/_/__  \_\_| _|_|______|_____|_| \_|______|__     __
+  / ____| |  | |/ ____/ ____|  ____|/ ____/ ____|  ____| |  | | |    | | \ \   / /
+ | (___ | |  | | |   | |    | |__  | (___| (___ | |__  | |  | | |    | |  \ \_/ /
+  \___ \| |  | | |   | |    |  __|  \___ \\___ \|  __| | |  | | |    | |   \   /
+  ____) | |__| | |___| |____| |____ ____) |___) | |    | |__| | |____| |____| |
+ |_____/_\____/_\_____\_____|______|_____/_____/|_|____ \____/|______|______|_|
+ |_   _| \ | |/ ____|__   __|/\   | |    | |    |  ____|  __ \
+   | | |  \| | (___    | |  /  \  | |    | |    | |__  | |  | |
+   | | | . ` |\___ \   | | / /\ \ | |    | |    |  __| | |  | |
+  _| |_| |\  |____) |  | |/ ____ \| |____| |____| |____| |__| |
+ |_____|_| \_|_____/   |_/_/    \_\______|______|______|_____/
+
+
+EOF
+  )
+
 (define pirate
   #<<EOF
 
@@ -74,6 +145,34 @@ EOF
 
 (define path (make-parameter #f))
 
+(define (check-dependency-met command test-command)
+  (if (not (= 0 (system/exit-code test-command)))
+      (error
+       (format
+        "\n\nERROR WHILE INSTALLING STREAMLINE!!!\n\n~a not found! Please make sure ~a is installed and on your $PATH!\n\n"
+        command
+        command))
+      (pretty-display (format "~a is already installed!" command))))
+
+(define (streamline-install)
+  ; Check depencendies are met on system
+  (check-dependency-met "git" "git --version")
+  (check-dependency-met "rust" "cargo --version")
+  (check-dependency-met "substreams" "substreams --version")
+
+  ; Check if $HOME./streamline/ exists
+  ; And clone the repo
+  (if (directory-exists? streamline-path)
+      (pretty-display "~/.streamline/ already exists")
+      (begin
+        (pretty-display "Creating ~/.streamline/")
+        (check-dependency-met
+         "Cloned Repo"
+         (format "git clone https://github.com/MercuricChloride/streamline-racket.git ~a"
+                 streamline-path))
+        (pretty-display "Created ~/.streamline/!")))
+  (pretty-display skull))
+
 (command-line
  #:program "Streamline CLI"
  #:usage-help "Streamline CLI"
@@ -89,18 +188,19 @@ EOF
  ; "a little description of ANOTHER-PARAM"
  ; (another-parameter (string=? "true" ANOTHER-PARAM))]
  ;[("-s" "--string") A-STRING "what is A-STRING?" (a-string A-STRING)]
- #:args [cmd]
+ #:args [cmd . remaining]
  (match cmd
    ["build"
     (command-line #:program "Streamline Build"
-                  #:argv (rest (vector->list (current-command-line-arguments)))
+                  #:argv remaining
                   #:args (path)
                   (generate-streamline-file path))]
    ["run"
     (command-line #:program "Streamline Run"
-                  #:argv (rest (vector->list (current-command-line-arguments)))
+                  #:argv remaining
                   #:args (path)
                   (generate-streamline-file path))]
+   ["install" (streamline-install)]
    ["wisdom" (pretty-display pirate)]
    ["dune" (pretty-display puke)]
    ["pinax"
