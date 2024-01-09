@@ -2,7 +2,7 @@ on:
   - push
 
 jobs:
-  test:
+  build-release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -18,7 +18,7 @@ jobs:
         run: raco pkg install --auto --batch
 
       - name: Build Executable
-        run: raco exe -o streamline
+        run: raco exe -o streamline ./cli.rkt
 
       - name: Upload Executable
         uses: actions/upload-artifact@v2
