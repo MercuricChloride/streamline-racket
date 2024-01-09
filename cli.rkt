@@ -215,4 +215,4 @@ EOF
     (begin
       (pretty-display hearts)
       (pretty-display "Spyglass Labs <3 The Graph!"))]
-   [_ "UNKNOWN COMMAND"]))
+   [_ (format "UNKNOWN COMMAND ~a" cmd)]))
