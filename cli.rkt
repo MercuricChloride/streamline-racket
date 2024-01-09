@@ -168,7 +168,7 @@ EOF
         (pretty-display "Creating ~/.streamline/")
         (check-dependency-met
          "Cloned Repo"
-         (format "git clone https://github.com/MercuricChloride/streamline-racket.git ~a"
+         (format "git clone https://github.com/MercuricChloride/streamline-template-repository ~a"
                  streamline-path))
         (pretty-display "Created ~/.streamline/!")))
   (pretty-display skull))
