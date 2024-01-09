@@ -282,7 +282,8 @@
         (when (not store?) ; only map modules have outputs
           (hash-set! yaml "output" output))
         (when store?
-          (hash-set! yaml "valueType" "proto:google.protobuf.Struct"))
+          (hash-set! yaml "valueType" "proto:google.protobuf.Struct")
+          (hash-set! yaml "updatePolicy" "set"))
 
         yaml)))
 

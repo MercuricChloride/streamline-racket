@@ -414,3 +414,6 @@ fn EVENTS(blk: eth::Block) -> Option<prost_wkt_types::Struct> {
   (println "Wrote output code"))
 
 (generate-streamline-file "examples/erc721.strm")
+
+(pretty-display (with-output-to-string (lambda ()
+                                         (system (format "cd ~a && make build" streamline-path)))))
