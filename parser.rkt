@@ -9,14 +9,15 @@
          "./lexer.rkt")
 
 (struct module-data (kind name attributes) #:prefab)
+(struct edge-data (from to mode) #:prefab)
 
 ;; PARAMETERS
 (define declared-modules
-  (make-parser-parameter (make-hash `(("EVENTS" . (module-data "MFN" "EVENTS" '()))
-                                      ("BLOCK" . (module-data "SOURCE" "BLOCK" '()))))))
+  (make-parser-parameter (make-hash (list (cons "EVENTS" (module-data "MFN" "EVENTS" '()))
+                                          (cons "BLOCK" (module-data "SOURCE" "BLOCK" '()))))))
 (define declared-edges
-  (make-parser-parameter
-   '(("BLOCK" . "EVENTS")))) ; This is a list of edges from module name -> module name
+  (make-parser-parameter (cons (edge-data "BLOCK" "EVENTS" "default")
+                               '()))) ; This is a list of edges from module name -> module name
 
 (define sfn-access-types `("deltas" "get"))
 
@@ -48,6 +49,8 @@
 (struct sfn (name inputs body attributes) #:prefab) ; sfn foo = EVENTS ...
 (struct source-def (path) #:prefab) ; import "foo.sol";
 (struct instance-def (name abi-type address) #:prefab) ; bayc = ERC721(0x...);
+
+(struct sfn-delta-edge (name) #:prefab)
 
 ;; EXPRESSIONS
 (define true/p (do (token/p 'TRUE) (pure (boolean-literal #t))))
@@ -191,33 +194,29 @@
 (define pipeline/p (do [applications <- (many/p functor/p #:min 1)] (pure (pipeline applications))))
 
 (define store-deltas/p
-  (let ([guard-return ""])
-    (do
-     (modules <- (declared-modules))
-     (input <- ident/p)
-     (token/p 'DOT)
-     (mode
-      <-
-      (guard/p
-       ident/p
-       (lambda (mode)
-         (let ([module-kind (car (find-module input modules))])
-           (cond
-             [(not (equal? module-kind "SFN")) false]
-             [(not (member mode sfn-access-types)) false]
-             [else true])))
-       #f
-       (lambda (mode)
-         (let ([module-kind (car (find-module input modules))])
-           (cond
-             [(not (equal? module-kind "SFN"))
-              "Invalid module type for! Please use an SFN if using <MODULE>.deltas or <MODULE>.get!"]
-             [(not (member mode sfn-access-types))
-              "Invalid special access kind! Valid field access on an SFN is `<MODULE>.deltas` or `<MODULE>.get`"]
-             [else
-              "This should never show up! If it does, go reach out to @blind_nabler and tell him his code is broken! Sorry!"])))))
-     ;; TODO I need to store the input as a delta still
-     (pure input))))
+  (do
+   (modules <- (declared-modules))
+   (input <- ident/p)
+   (token/p 'DOT)
+   (mode
+    <-
+    (guard/p
+     ident/p
+     (lambda (mode)
+       (match (hash-ref modules input)
+         [(module-data "SFN" _ _) (if (member mode sfn-access-types) true false)]
+         [_ false]))
+     #f
+     (lambda (mode)
+       (let ([module-kind (module-data-kind (hash-ref modules input))])
+         (cond
+           [(not (equal? module-kind "SFN"))
+            "Invalid module type for! Please use an SFN if using <MODULE>.deltas or <MODULE>.get!"]
+           [(not (member mode sfn-access-types))
+            "Invalid special access kind! Valid field access on an SFN is `<MODULE>.deltas` or `<MODULE>.get`"]
+           [else
+            "This should never show up! If it does, go reach out to @blind_nabler and tell him his code is broken! Sorry!"])))))
+   (pure (sfn-delta-edge input))))
 
 (define module-input/p (do [input <- (or/p (try/p store-deltas/p) ident/p)] (pure input)))
 
@@ -227,7 +226,7 @@
       (token/p 'RBRACKET)
       (pure inputs)))
 
-(define single-module-input/p (do [inputs <- module-input/p] (pure (list inputs))))
+(define single-module-input/p (do [input <- module-input/p] (pure (list input))))
 
 (define module-inputs/p
   (do (inputs <- (or/p (try/p many-module-inputs/p) single-module-input/p)) (pure inputs)))
@@ -254,18 +253,28 @@
       [name
        <-
        (guard/p module-name/p
-                (lambda (name) (not (hash-ref modules name)))
+                (lambda (name) (not (hash-has-key? modules name)))
                 "This module name already has been defined!")]
-      (declared-modules (cons (cons "MFN" name) modules))
+      (declared-modules (let ([ht (hash-copy modules)])
+                          (hash-set! ht name (module-data "MFN" name '()))
+                          ht))
       (token/p 'ASSIGNMENT)
       [inputs
        <-
        (guard/p module-inputs/p
                 (lambda (inputs)
                   (for/and ([input inputs])
-                    (member input (stream->list (map cdr modules)))))
+                    (match input
+                      [(sfn-delta-edge from) (hash-has-key? modules from)]
+                      [_ (hash-has-key? modules input)])))
                 "This module name is undefined! Please use a defined module for inputs to a module!")]
-      (declared-edges (stream-append edges (map (lambda (input) (cons input name)) inputs)))
+      (declared-edges (stream-append edges
+                                     (map (lambda (input)
+                                            (println input)
+                                            (match input
+                                              [(sfn-delta-edge from) (edge-data from name "deltas")]
+                                              [_ (edge-data input name "default")]))
+                                          inputs)))
       [pipeline <- pipeline/p]
       (pure (mfn name inputs pipeline '()))))
 
@@ -277,18 +286,28 @@
       [name
        <-
        (guard/p ident/p
-                (lambda (name) (not (member name modules)))
+                (lambda (name) (not (hash-has-key? modules name)))
                 "This module name already has been defined!")]
-      (declared-modules (cons (cons "SFN" name) modules))
+      (declared-modules (let ([ht (hash-copy modules)])
+                          (hash-set! ht name (module-data "SFN" name attributes))
+                          ht))
       (token/p 'ASSIGNMENT)
       [inputs
        <-
        (guard/p module-inputs/p
                 (lambda (inputs)
                   (for/and ([input inputs])
-                    (member input (stream->list (map cdr modules)))))
+                    (match input
+                      [(sfn-delta-edge from) (hash-has-key? modules from)]
+                      [_ (hash-has-key? modules input)])))
                 "This module name is undefined! Please use a defined module for inputs to a module!")]
-      (declared-edges (stream-append edges (map (lambda (input) (cons input name)) inputs)))
+      (declared-edges (stream-append edges
+                                     (map (lambda (input)
+                                            (println input)
+                                            (match input
+                                              [(sfn-delta-edge from) (edge-data from name "deltas")]
+                                              [_ (edge-data input name "default")]))
+                                          inputs)))
       [pipeline <- pipeline/p]
       (pure (sfn name inputs pipeline attributes))))
 
@@ -311,11 +330,7 @@
   (do [cells <- (many/p (or/p module-def/p source-def/p instance-def/p))]
       [modules <- (declared-modules)]
       [edges <- (declared-edges)]
-      (pure (list cells modules (stream->list edges)))))
-
-(define (find-module name modules)
-  (define filtered (filter (lambda (mod) (equal? name (cdr mod))) (stream->list modules)))
-  (if (empty? filtered) false (first filtered)))
+      (pure (list cells modules edges))))
 
 (define (module-input->yaml input)
   (define kind (car input))
@@ -330,48 +345,42 @@
   yaml)
 
 (define (module->yaml mod inputs)
-  (if (equal? (car mod) "SOURCE")
-      false
-      (let ([output (hash "type" "proto:google.protobuf.Struct")]
-            [store? (match (car mod)
-                      ["MFN" false]
-                      ["SFN" true])]
-            [yaml (make-hash)])
-
-        (hash-set! yaml "name" (cdr mod))
-        (hash-set! yaml "kind" (if store? "store" "map"))
-        (hash-set! yaml "inputs" (stream->list (map module-input->yaml inputs)))
-
-        (when (not store?) ; only map modules have outputs
-          (hash-set! yaml "output" output))
-        (when store?
-          (hash-set! yaml "valueType" "proto:google.protobuf.Struct")
-          (hash-set! yaml "updatePolicy" "set"))
-
-        yaml)))
+  (let ([output (hash "type" "proto:google.protobuf.Struct")] [yaml (make-hash)])
+    (match mod
+      [(module-data "MFN" name attributes)
+       (begin
+         (hash-set! yaml "name" name)
+         (hash-set! yaml "kind" "map")
+         (hash-set! yaml "output" output))]
+      [(module-data "SFN" name attributes)
+       (begin
+         (if (member "immutable" attributes)
+             (hash-set! yaml "updatePolicy" "setIfNotExists")
+             (hash-set! yaml "updatePolicy" "set"))
+         (hash-set! yaml "name" name)
+         (hash-set! yaml "kind" "store")
+         (hash-set! yaml "valueType" output))]
+      [_ #f])
+    yaml))
 
 (define (parse-file! tokenized-input)
   (match (parse-result! (parse-tokens streamline/p tokenized-input))
     [(list parsed-file modules edges)
      (begin
+       (println (format "EDGES: ~a" (stream->list edges)))
        (define nodes
-         (filter-map
-          (lambda (mod)
-            (define inputs
-              (filter-map (lambda (edge)
-                            (define module-name (cdr mod))
-                            (if (equal? (cdr edge) module-name) (find-module (car edge) modules) #f))
-                          edges))
-            (module->yaml mod (stream->list inputs)))
-          modules))
-       (hash "parsed-file"
-             parsed-file
-             "modules"
-             modules
-             "edges"
-             edges
-             "nodes"
-             (stream->list nodes)))]))
+         (filter-map (lambda (mod)
+                       (define inputs
+                         ;; Find modules inputs
+                         (filter-map (lambda (edge)
+                                       (define module-name (module-data-name mod))
+                                       (if (equal? (edge-data-to edge) module-name)
+                                           (hash-ref modules (edge-data-from edge))
+                                           #f))
+                                     (stream->list edges)))
+                       (module->yaml mod (stream->list inputs)))
+                     (hash-values modules)))
+       (hash "parsed-file" parsed-file "nodes" (stream->list nodes)))]))
 
 (provide parse-file!
          primitive-value
@@ -395,6 +404,8 @@
          pipeline
          store-set
          store-delete
+
+         sfn-delta-edge
 
          mfn
          sfn

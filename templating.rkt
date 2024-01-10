@@ -108,15 +108,28 @@ sol! {
     (source-data sol-macro (first name) (flatten events))))
 
 (define (mfn/gen name inputs body)
+  (define formatted-inputs
+    (map (lambda (input)
+           (match input
+             [(sfn-delta-edge from) from]
+             [_ input]))
+         inputs))
+
   (define -inputs
-    (string-join (map (lambda (input) (format "~a: prost_wkt_types::Struct" input)) inputs) ","))
+    (string-join
+     (map (lambda (input)
+            (match input
+              [(sfn-delta-edge from) (format "~a: Deltas<DeltaProto<prost_wkt_types::Struct>>" from)]
+              [_ (format "~a: prost_wkt_types::Struct" input)]))
+          inputs)
+     ","))
 
   (define initial-value
-    (if (= (length inputs) 1)
-        (format "let output_map = ~a;" (first inputs))
-        (format "let output_map = (~a);" (string-join inputs ", "))))
+    (if (= (length formatted-inputs) 1)
+        (format "let output_map = ~a;" (first formatted-inputs))
+        (format "let output_map = (~a);" (string-join formatted-inputs ", "))))
 
-  (define format-inputs (format "format_inputs!(~a);" (string-join inputs ",")))
+  (define format-inputs (format "format_inputs!(~a);" (string-join formatted-inputs ",")))
   (expand
    "
 #[substreams::handlers::map]
@@ -293,8 +306,6 @@ map_literal!{
 
   ; parse the file
   (define parsed-result (parse-file! tokenized-input))
-  (define modules (hash-ref parsed-result "modules"))
-  (define edges (hash-ref parsed-result "edges"))
   (define nodes (hash-ref parsed-result "nodes"))
   (generate-yaml streamline-name nodes)
   (define parsed-input (hash-ref parsed-result "parsed-file"))
