@@ -159,6 +159,7 @@ EOF
   (check-dependency-met "git" "git --version")
   (check-dependency-met "rust" "cargo --version")
   (check-dependency-met "substreams" "substreams --version")
+  (check-dependency-met "protobuf / protoc" "protoc --version")
 
   ; Check if $HOME./streamline/ exists
   ; And clone the repo

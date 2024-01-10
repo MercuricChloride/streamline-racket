@@ -69,17 +69,6 @@ loose_sol! {
 "
    (hash "event-name" event-name "abi" abi "address" (string-downcase (substring address 2)))))
 
-(define (instance-def/gen name identifier address)
-  (expand
-   "
-        map_insert!(\"{{name}}\",
-                    map_literal! {
-                        \"Transfer\"; {{identifier}}::Transfer::get_events(&blk, &[address!(\"{{address}}\")])
-                    },
-                    output_map);
-"
-   (hash "name" name "identifier" identifier "address" "asfd")))
-
 (define (sources parser-result)
   (filter (lambda (item) (eq? (first item) 'source)) parser-result))
 
@@ -181,7 +170,7 @@ fn {{name}}({{inputs}}, s: StoreSetProto<prost_wkt_types::Struct>) {
          initial-value)))
 
 (define (fmt-args args)
-  (string-join (map (lambda (_) "Map<String, serde_json::Value>") args) ","))
+  (string-join (map (lambda (_) "SolidityType") args) ","))
 
 (define (lam/gen fn-args exprs)
   (define -args (string-join fn-args ","))
@@ -193,11 +182,12 @@ let output_map = (|({{args}}): ({{arg-types}})| { {{exprs}} })(output_map);
 
 (define (hof/gen hof-kind fn-args exprs)
   (define -args (string-join fn-args ","))
-  (expand
-   "
-  let output_map:Option<Vec<serde_json::Value>> = {{kind}}!(output_map, |{{args}}| { {{exprs}} });
+  ; TODO I am leaving this here, because I might want the Option Type later
+  ;let output_map:Option<SolidityType> = {{kind}}!(output_map, |{{args}}| { {{exprs}} });
+  (expand "
+  let output_map:SolidityType = {{kind}}!(output_map, |{{args}}| { {{exprs}} });
 "
-   (hash "kind" hof-kind "args" -args "exprs" exprs)))
+          (hash "kind" hof-kind "args" -args "exprs" exprs)))
 
 (define (map-literal/gen kvs)
   (expand "
@@ -212,7 +202,7 @@ map_literal!{
 " (hash "key" key "val" val)))
 
 (define (binary-op/gen lh op rh)
-  (format "Into::<SolidityJsonValue>::into((Into::<SolidityType>::into(~a) ~a ~a))" lh op rh))
+  (format "SolidityType::from((~a ~a ~a))" lh op rh))
 
 (define (field-access/gen lh rhs)
   (format "map_access!(&~a,~a)"
@@ -226,17 +216,16 @@ map_literal!{
                        ",")))
 
 (define (rpc-call/gen name fn args)
-  (expand-string
-   "
+  (expand-string "
 {{name}}!({{fn}}Call, {{args}})
 "
-   (hash "name"
-         name
-         "fn"
-         fn
-         "args"
-         (string-join (map (lambda (arg) (format "SolidityType::from(~a)" (generate-code arg))) args)
-                      ","))))
+                 (hash "name"
+                       name
+                       "fn"
+                       fn
+                       "args"
+                       (string-join (map (lambda (arg) (format "~a" (generate-code arg))) args)
+                                    ","))))
 
 (define (write-string-to-file string filename)
   (with-output-to-file filename (lambda () (pretty-display string)) #:exists 'replace))
@@ -244,7 +233,6 @@ map_literal!{
 (define (generate-code node)
   (match node
     [(source-def path) (gen source-def/gen path)]
-    [(instance-def name identifier address) (gen instance-def/gen name identifier address)]
     [(rpc-call instance fn args) (gen rpc-call/gen instance fn args)]
     [(map-literal kvs) (map-literal/gen (map generate-code kvs))]
 
@@ -256,13 +244,9 @@ map_literal!{
     [(boolean-literal value) (format "sol_type!(Boolean, \"~a\")" (if value "1" "0"))]
     [(address-literal value) (format "sol_type!(Address, \"~a\")" value)]
     [(tuple-literal vals)
-     (format
-      "SolidityType::Tuple(vec![~a].into_iter().map(|item| item.into()).collect()).to_json_value()"
-      (string-join (map generate-code vals) ","))]
+     (format "SolidityType::Tuple(vec![~a])" (string-join (map generate-code vals) ","))]
     [(list-literal vals)
-     (format
-      "SolidityType::List(vec![~a].into_iter().map(|item| item.into()).collect()).to_json_value()"
-      (string-join (map generate-code vals) ","))]
+     (format "SolidityType::List(vec![~a])" (string-join (map generate-code vals) ","))]
     [(mfn name inputs body) (gen mfn/gen name inputs body)]
     [(sfn name inputs body) (gen sfn/gen name inputs body)]
     [(lam fn-args exprs) (gen lam/gen fn-args exprs)]
@@ -353,8 +337,8 @@ macro_rules! {{name}} {
        call
        \"))
                                  .map(|return_value| serde_json::to_value(return_value).unwrap())
-                                 .map(|value| SolidityJsonValue::guess_json_value(&value).unwrap())
-                                 .collect::<Vec<SolidityJsonValue>>();
+                                 .map(|value| SolidityType::guess_json_value(&value).unwrap())
+                                 .collect::<Vec<SolidityType>>();
         responses.get(0).unwrap().clone()
     } };
 }
@@ -388,11 +372,9 @@ fn EVENTS(blk: eth::Block) -> Option<prost_wkt_types::Struct> {
            (let ([name (first instance)] [events (rest instance)])
              (expand
               "
-        map_insert!(\"{{name}}\",
-                    map_literal! {
+        output_map.insert(\"{{name}}\", map_literal! {
 {{{instance-events}}}
-                    },
-                    output_map);
+                    });
 "
               (hash "name" name "instance-events" (string-join events)))))
          instance-events)))))

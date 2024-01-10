@@ -4,6 +4,17 @@ import "interfaces/Blur.sol";
 bayc = ERC721(0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D);
 milady = ERC721(0x5Af0D9827E0c53E4799BB226655A1de152A425a5);
 blur = Blur(0x000000000000Ad05Ccc4F10045630fb830B95127);
+azuki = ERC721(0xED5AF388653567Af2F388E6224dC7C4b3241C544);
+
+mfn miladyTransfers = EVENTS
+    |> (events) => events.milady.Transfer;
+    |> map (t) => {
+        token: t._tokenId
+    };
+
+mfn smolBayc = EVENTS
+    |> (events) => events.bayc.Transfer;
+    |> map (t) => t._tokenId;
 
 mfn baycTransfers = EVENTS
     |> (events) => events.bayc.Transfer;
@@ -28,10 +39,22 @@ mfn baycTransfers = EVENTS
        rpcTest: #milady.ownerOf(transfer._tokenId)#
     };
 
-mfn blurOrders = [EVENTS, baycTransfers]
+mfn blurTrades = EVENTS
+    |> (events) => events.blur.OrdersMatched;
+
+mfn comp = [miladyTransfers, smolBayc]
+    |> (milady, smol) => {
+       milady: milady,
+       smol: smol
+    };
+
+mfn helloJordan = [EVENTS, baycTransfers]
     |> (events, transfers) => events.blur.OrdersMatched;
     |> map (order) => {
        maker: order.maker,
        taker: order.taker,
        epic: order.sellHash
     };
+
+mfn azukiTransfers = EVENTS
+    |> (events) => events.azuki.Transfer;

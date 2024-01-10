@@ -17,6 +17,8 @@
   (make-parser-parameter
    '(("BLOCK" . "EVENTS")))) ; This is a list of edges from module name -> module name
 
+(define sfn-access-types `("deltas" "get"))
+
 ;; STRUCTS
 (struct primitive-value (value) #:prefab) ; IE Boolean etc
 (struct identifier (name) #:prefab) ; foo
@@ -167,13 +169,44 @@
 
 (define pipeline/p (do [applications <- (many/p functor/p #:min 1)] (pure (pipeline applications))))
 
+(define store-deltas/p
+  (let ([guard-return ""])
+    (do
+     (modules <- (declared-modules))
+     (input <- ident/p)
+     (token/p 'DOT)
+     (mode
+      <-
+      (guard/p
+       ident/p
+       (lambda (mode)
+         (let ([module-kind (car (find-module input modules))])
+           (cond
+             [(not (equal? module-kind "SFN")) false]
+             [(not (member mode sfn-access-types)) false]
+             [else true])))
+       #f
+       (lambda (mode)
+         (let ([module-kind (car (find-module input modules))])
+           (cond
+             [(not (equal? module-kind "SFN"))
+              "Invalid module type for! Please use an SFN if using <MODULE>.deltas or <MODULE>.get!"]
+             [(not (member mode sfn-access-types))
+              "Invalid special access kind! Valid field access on an SFN is `<MODULE>.deltas` or `<MODULE>.get`"]
+             [else
+              "This should never show up! If it does, go reach out to @blind_nabler and tell him his code is broken! Sorry!"])))))
+     ;; TODO I need to store the input as a delta still
+     (pure input))))
+
+(define module-input/p (do [input <- (or/p (try/p store-deltas/p) ident/p)] (pure input)))
+
 (define many-module-inputs/p
   (do (token/p 'LBRACKET)
-      [inputs <- (many/p ident/p #:min 1 #:sep (token/p 'COMMA))]
+      [inputs <- (many/p module-input/p #:min 1 #:sep (token/p 'COMMA))]
       (token/p 'RBRACKET)
       (pure inputs)))
 
-(define single-module-input/p (do [inputs <- ident/p] (pure (list inputs))))
+(define single-module-input/p (do [inputs <- module-input/p] (pure (list inputs))))
 
 (define module-inputs/p
   (do (inputs <- (or/p (try/p many-module-inputs/p) single-module-input/p)) (pure inputs)))
