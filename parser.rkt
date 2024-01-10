@@ -359,10 +359,10 @@
       [(module-data "MFN" name attributes)
        (hash "name" name "kind" "map" "output" output "inputs" inputs)]
       [(module-data "SFN" name attributes)
-       (hash "updatePolicy"
-             (if (member "immutable" attributes) "set_if_not_exists" "set")
-             "name"
+       (hash "name"
              name
+             "updatePolicy"
+             (if (member "immutable" attributes) "set_if_not_exists" "set")
              "kind"
              "store"
              "valueType"
