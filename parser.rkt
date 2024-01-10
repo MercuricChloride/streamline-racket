@@ -10,6 +10,7 @@
 
 (struct module-data (kind name attributes) #:prefab)
 (struct edge-data (from to mode) #:prefab)
+(struct yaml-input-data (name kind mode) #:prefab)
 
 ;; PARAMETERS
 (define declared-modules
@@ -344,38 +345,50 @@
     ["SOURCE" (hash-set! yaml "source" "sf.ethereum.type.v2.Block")])
   yaml)
 
+(define (format-yaml-input input)
+  (match input
+    [(yaml-input-data name "MFN" "default") (hash "map" name)]
+    [(yaml-input-data name "SFN" "default") (hash "store" name "mode" "get")]
+    [(yaml-input-data name "SFN" "deltas") (hash "store" name "mode" "deltas")]
+    [(yaml-input-data name "SOURCE" "default") (hash "source" "sf.ethereum.type.v2.Block")]))
+
 (define (module->yaml mod inputs)
-  (let ([output (hash "type" "proto:google.protobuf.Struct")] [yaml (make-hash)])
+  (let ([output (hash "type" "proto:google.protobuf.Struct")]
+        [inputs (stream->list (map format-yaml-input inputs))])
     (match mod
       [(module-data "MFN" name attributes)
-       (begin
-         (hash-set! yaml "name" name)
-         (hash-set! yaml "kind" "map")
-         (hash-set! yaml "output" output))]
+       (hash "name" name "kind" "map" "output" output "inputs" inputs)]
       [(module-data "SFN" name attributes)
-       (begin
-         (if (member "immutable" attributes)
-             (hash-set! yaml "updatePolicy" "setIfNotExists")
-             (hash-set! yaml "updatePolicy" "set"))
-         (hash-set! yaml "name" name)
-         (hash-set! yaml "kind" "store")
-         (hash-set! yaml "valueType" output))]
-      [_ #f])
-    yaml))
+       (hash "updatePolicy"
+             (if (member "immutable" attributes) "set_if_not_exists" "set")
+             "name"
+             name
+             "kind"
+             "store"
+             "valueType"
+             "proto:google.protobuf.Struct"
+             "inputs"
+             inputs)]
+      [_ #f])))
 
 (define (parse-file! tokenized-input)
   (match (parse-result! (parse-tokens streamline/p tokenized-input))
     [(list parsed-file modules edges)
      (begin
-       (println (format "EDGES: ~a" (stream->list edges)))
        (define nodes
          (filter-map (lambda (mod)
                        (define inputs
                          ;; Find modules inputs
                          (filter-map (lambda (edge)
                                        (define module-name (module-data-name mod))
+
                                        (if (equal? (edge-data-to edge) module-name)
-                                           (hash-ref modules (edge-data-from edge))
+                                           (let* ([from-module (hash-ref modules
+                                                                         (edge-data-from edge))]
+                                                  [from-name (module-data-name from-module)]
+                                                  [from-kind (module-data-kind from-module)]
+                                                  [mode (edge-data-mode edge)])
+                                             (yaml-input-data from-name from-kind mode))
                                            #f))
                                      (stream->list edges)))
                        (module->yaml mod (stream->list inputs)))
@@ -406,6 +419,7 @@
          store-delete
 
          sfn-delta-edge
+         yaml-input-data
 
          mfn
          sfn
