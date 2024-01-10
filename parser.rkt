@@ -8,11 +8,12 @@
          dali
          "./lexer.rkt")
 
+(struct module-data (kind name attributes) #:prefab)
+
 ;; PARAMETERS
 (define declared-modules
-  (make-parser-parameter
-   '(("MFN" . "EVENTS") ("SOURCE" .
-                                  "BLOCK")))) ; This is a list of pairs of (MODULE_TYPE . MODULE_NAME)
+  (make-parser-parameter (make-hash `(("EVENTS" . (module-data "MFN" "EVENTS" '()))
+                                      ("BLOCK" . (module-data "SOURCE" "BLOCK" '()))))))
 (define declared-edges
   (make-parser-parameter
    '(("BLOCK" . "EVENTS")))) ; This is a list of edges from module name -> module name
@@ -36,13 +37,15 @@
 (struct binary-op (lh op rh) #:prefab) ; 42 + 5
 (struct key-value (key value) #:prefab) ; foo: bar,
 (struct field-access (lh fields) #:prefab) ; foo.bar or foo.bar.baz
+(struct store-set (key value) #:prefab) ; set("hello", 42);
+(struct store-delete (prefix) #:prefab) ; delete("hello");
 
 (struct lam (args body) #:prefab) ; (foo) => bar;
 (struct hof (hof callback) #:prefab) ; map (foo) => bar;
 (struct pipeline (functors) #:prefab) ; |> (foo) => bar;
 
-(struct mfn (name inputs body) #:prefab) ; mfn foo = EVENTS...
-(struct sfn (name inputs body) #:prefab) ; sfn foo = EVENTS ...
+(struct mfn (name inputs body attributes) #:prefab) ; mfn foo = EVENTS...
+(struct sfn (name inputs body attributes) #:prefab) ; sfn foo = EVENTS ...
 (struct source-def (path) #:prefab) ; import "foo.sol";
 (struct instance-def (name abi-type address) #:prefab) ; bayc = ERC721(0x...);
 
@@ -62,6 +65,22 @@
       [vals <- (many+/p (lazy/p expression/p) #:sep (token/p 'COMMA))]
       (token/p 'RBRACKET)
       (pure (list-literal vals))))
+
+(define store-set/p
+  (do (token/p 'SET)
+      (token/p 'LPAREN)
+      (key <- (lazy/p expression/p))
+      (token/p 'COMMA)
+      (value <- (lazy/p expression/p))
+      (token/p 'RPAREN)
+      (pure (store-set key value))))
+
+(define store-delete/p
+  (do (token/p 'DELETE)
+      (token/p 'LPAREN)
+      (prefix <- (lazy/p expression/p))
+      (token/p 'RPAREN)
+      (pure (store-delete prefix))))
 
 (define literal/p
   (do [literal
@@ -139,6 +158,8 @@
 
 (define expression/p
   (or/p (try/p binary-op/p)
+        store-set/p
+        store-delete/p
         rpc-call/p
         map-literal/p
         true/p
@@ -218,6 +239,14 @@
                      "EVENTS is a restricted module name. Please choose a different name!"))
       (pure name)))
 
+(define attr-immutable/p
+  (do (token/p 'AT)
+      (immutable <- (guard/p ident/p (lambda (ident) (equal? ident "immutable"))))
+      (pure immutable)))
+
+(define sfn-attributes/p
+  (do (attributes <- (many*/p (or/p (try/p attr-immutable/p)))) (pure attributes)))
+
 (define mfn/p
   (do (token/p 'MFN)
       [modules <- (declared-modules)]
@@ -225,7 +254,7 @@
       [name
        <-
        (guard/p module-name/p
-                (lambda (name) (not (member name (stream->list (map cdr modules)))))
+                (lambda (name) (not (hash-ref modules name)))
                 "This module name already has been defined!")]
       (declared-modules (cons (cons "MFN" name) modules))
       (token/p 'ASSIGNMENT)
@@ -238,10 +267,11 @@
                 "This module name is undefined! Please use a defined module for inputs to a module!")]
       (declared-edges (stream-append edges (map (lambda (input) (cons input name)) inputs)))
       [pipeline <- pipeline/p]
-      (pure (mfn name inputs pipeline))))
+      (pure (mfn name inputs pipeline '()))))
 
 (define sfn/p
-  (do (token/p 'SFN)
+  (do (attributes <- sfn-attributes/p)
+      (token/p 'SFN)
       [modules <- (declared-modules)]
       [edges <- (declared-edges)]
       [name
@@ -260,7 +290,7 @@
                 "This module name is undefined! Please use a defined module for inputs to a module!")]
       (declared-edges (stream-append edges (map (lambda (input) (cons input name)) inputs)))
       [pipeline <- pipeline/p]
-      (pure (sfn name inputs pipeline))))
+      (pure (sfn name inputs pipeline attributes))))
 
 (define module-def/p (or/p mfn/p sfn/p))
 
@@ -363,6 +393,8 @@
          lam
          hof
          pipeline
+         store-set
+         store-delete
 
          mfn
          sfn

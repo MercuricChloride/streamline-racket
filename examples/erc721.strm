@@ -56,5 +56,10 @@ mfn helloJordan = [EVENTS, baycTransfers]
        epic: order.sellHash
     };
 
-mfn azukiTransfers = EVENTS
+@immutable
+sfn storeAzukiOwners = EVENTS
     |> (events) => events.azuki.Transfer;
+    |> map (t) => set(t._tokenId, t._to);
+
+mfn mapAzukiOwnerChanges = storeAzukiOwners.deltas
+    |> (deltas) => deltas;

@@ -139,7 +139,7 @@ fn {{name}}({{inputs}}) -> Option<prost_wkt_types::Struct> {
          "initial-value"
          initial-value)))
 
-(define (sfn/gen name inputs body)
+(define (sfn/gen name inputs body attributes)
   (define -inputs
     (string-join (map (lambda (input) (format "~a: prost_wkt_types::Struct" input)) inputs) ","))
 
@@ -149,10 +149,16 @@ fn {{name}}({{inputs}}) -> Option<prost_wkt_types::Struct> {
         (format "let output_map = (~a);" (string-join inputs ", "))))
 
   (define format-inputs (format "format_inputs!(~a);" (string-join inputs ",")))
+
+  (define store-kind
+    (if (member "immutable" attributes)
+        "StoreSetIfNotExistsProto<prost_wkt_types::Struct>"
+        "StoreSetProto<prost_wkt_types::Struct>"))
+
   (expand
    "
 #[substreams::handlers::store]
-fn {{name}}({{inputs}}, s: StoreSetProto<prost_wkt_types::Struct>) {
+fn {{name}}({{inputs}}, substreams_store_param: {{store-kind}}) {
     {{format-inputs}}
     {{initial-value}}
     {{body}}
@@ -167,7 +173,9 @@ fn {{name}}({{inputs}}, s: StoreSetProto<prost_wkt_types::Struct>) {
          "body"
          body
          "initial-value"
-         initial-value)))
+         initial-value
+         "store-kind"
+         store-kind)))
 
 (define (fmt-args args)
   (string-join (map (lambda (_) "SolidityType") args) ","))
@@ -227,6 +235,12 @@ map_literal!{
                        (string-join (map (lambda (arg) (format "~a" (generate-code arg))) args)
                                     ","))))
 
+(define (store-set/gen key value)
+  (format "{substreams_store_param.generic_set(~a, ~a); SolidityType::Null}" key value))
+
+(define (store-delete/gen prefix)
+  (format "{substreams_store_param.generic_delete_prefix(~a); SolidityType::Null}" prefix))
+
 (define (write-string-to-file string filename)
   (with-output-to-file filename (lambda () (pretty-display string)) #:exists 'replace))
 
@@ -247,8 +261,10 @@ map_literal!{
      (format "SolidityType::Tuple(vec![~a])" (string-join (map generate-code vals) ","))]
     [(list-literal vals)
      (format "SolidityType::List(vec![~a])" (string-join (map generate-code vals) ","))]
-    [(mfn name inputs body) (gen mfn/gen name inputs body)]
-    [(sfn name inputs body) (gen sfn/gen name inputs body)]
+    [(mfn name inputs body _attributes) (gen mfn/gen name inputs body)]
+    [(sfn name inputs body attributes) (gen sfn/gen name inputs body attributes)]
+    [(store-set key value) (gen store-set/gen key value)]
+    [(store-delete prefix) (gen store-delete/gen prefix)]
     [(lam fn-args exprs) (gen lam/gen fn-args exprs)]
     [(hof kind (lam args body)) (gen hof/gen kind args body)]
     [(pipeline functors) (string-join (map generate-code functors) "\n")]
