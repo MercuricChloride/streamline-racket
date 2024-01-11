@@ -1,0 +1,22 @@
+import "interfaces/ERC721.sol";
+
+bayc = ERC721(0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D);
+milady = ERC721(0x5Af0D9827E0c53E4799BB226655A1de152A425a5);
+azuki = ERC721(0xED5AF388653567Af2F388E6224dC7C4b3241C544);
+
+mfn miladyTransfers = EVENTS
+    |> (events) => events.milady.Transfer;
+
+mfn baycTransfers = EVENTS
+    |> (events) => events.bayc.Transfer;
+
+mfn azukiTransfers = EVENTS
+    |> (events) => events.azuki.Transfer;
+
+@immutable
+sfn storeAzukiOwners = EVENTS
+    |> (events) => events.azuki.Transfer;
+    |> map (t) => set(t._tokenId, t._to);
+
+mfn mapAzukiOwnerChanges = storeAzukiOwners.deltas
+    |> (deltas) => deltas;
