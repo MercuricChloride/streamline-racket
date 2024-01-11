@@ -41,6 +41,7 @@
 (struct field-access (lh fields) #:prefab) ; foo.bar or foo.bar.baz
 (struct store-set (key value) #:prefab) ; set("hello", 42);
 (struct store-delete (prefix) #:prefab) ; delete("hello");
+(struct do-block (expressions) #:prefab) ; do {...};
 
 (struct lam (args body) #:prefab) ; (foo) => bar;
 (struct hof (hof callback) #:prefab) ; map (foo) => bar;
@@ -85,6 +86,13 @@
       (prefix <- (lazy/p expression/p))
       (token/p 'RPAREN)
       (pure (store-delete prefix))))
+
+(define do-block/p
+  (do (token/p 'DO)
+      (token/p 'LCURLY)
+      (exprs <- (many+/p (lazy/p expression/p) #:sep (token/p 'SEMI)))
+      (token/p 'RCURLY)
+      (pure (do-block exprs))))
 
 (define literal/p
   (do [literal
@@ -164,6 +172,7 @@
   (or/p (try/p binary-op/p)
         store-set/p
         store-delete/p
+        do-block/p
         rpc-call/p
         map-literal/p
         true/p
@@ -405,6 +414,7 @@
          typed-field
          rpc-call
 
+         do-block
          map-literal
          string-literal
          number-literal

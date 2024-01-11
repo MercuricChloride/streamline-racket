@@ -4,7 +4,8 @@
 
 (define-lex-abbrevs
  (whitespace? whitespace)
- (keyword? (:or "map" "filter" "reduce" "mfn" "sfn" "fn" "true" "false" "import" "set" "delete"))
+ (keyword?
+  (:or "map" "filter" "reduce" "mfn" "sfn" "fn" "true" "false" "import" "set" "delete" "do" "get"))
  (identifier? (:seq (:or alphabetic (char-set "$_")) (:* (:or alphabetic numeric (char-set "$_")))))
  ;TODO Fix operator precedence
  (operator? (:or "+" "-" "*" "/" "==" "!=" "<" ">" "<=" ">=" "&&" "||" "!" "|>" "="))
@@ -16,7 +17,7 @@
  (boolean? (:or "true" "false")))
 
 (define-tokens common-tokens (IDENTIFIER OPERATOR NUMBER ADDRESS STRING))
-(define-empty-tokens keyword-tokens (MFN SFN MAP FILTER REDUCE TRUE FALSE SOURCE SET DELETE))
+(define-empty-tokens keyword-tokens (MFN SFN MAP FILTER REDUCE TRUE FALSE SOURCE SET DELETE DO GET))
 (define-tokens operator-tokens
                (PLUS MINUS MUL DIV EQ NOT-EQ LT GT LTE GTE AND OR NOT PIPE ASSIGNMENT))
 (define-empty-tokens punct-tokens
@@ -82,7 +83,9 @@
     ["reduce" token-REDUCE]
     ["true" token-TRUE]
     ["false" token-FALSE]
-    ["import" token-SOURCE]))
+    ["import" token-SOURCE]
+    ["do" token-DO]
+    ["get" token-GET]))
 
 (define (string->string-token str)
   (let ([replacement (if (string-prefix? str "\"") "\"" "'")]) (string-replace str replacement "")))

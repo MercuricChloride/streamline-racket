@@ -249,6 +249,9 @@ map_literal!{
 (define (store-delete/gen prefix)
   (format "{substreams_store_param.generic_delete_prefix(~a); SolidityType::Null}" prefix))
 
+(define (do-block/gen exprs)
+  (format "{ ~a }" (string-join exprs ";")))
+
 (define (write-string-to-file string filename)
   (with-output-to-file filename (lambda () (pretty-display string)) #:exists 'replace))
 
@@ -256,6 +259,7 @@ map_literal!{
   (match node
     [(source-def path) (gen source-def/gen path)]
     [(rpc-call instance fn args) (gen rpc-call/gen instance fn args)]
+    [(do-block exprs) (do-block/gen (map generate-code exprs))]
     [(map-literal kvs) (map-literal/gen (map generate-code kvs))]
 
     [(key-value key val) (gen key-value/gen key val)]
@@ -298,6 +302,7 @@ map_literal!{
   ; lex the file
   (define tokenized-input (tokenize source-port))
   (println "Tokenized Input")
+  (pretty-display tokenized-input)
 
   ; parse the file
   (define parsed-result (parse-file! tokenized-input))
