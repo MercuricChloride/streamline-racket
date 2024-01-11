@@ -41,6 +41,7 @@
 (struct field-access (lh fields) #:prefab) ; foo.bar or foo.bar.baz
 (struct store-set (key value) #:prefab) ; set("hello", 42);
 (struct store-delete (prefix) #:prefab) ; delete("hello");
+(struct store-get (ident key) #:prefab) ; get(storeBids, "hello");
 (struct do-block (expressions) #:prefab) ; do {...};
 
 (struct lam (args body) #:prefab) ; (foo) => bar;
@@ -70,6 +71,15 @@
       [vals <- (many+/p (lazy/p expression/p) #:sep (token/p 'COMMA))]
       (token/p 'RBRACKET)
       (pure (list-literal vals))))
+
+(define store-get/p
+  (do (token/p 'GET)
+      (token/p 'LPAREN)
+      (identifier <- ident/p)
+      (token/p 'COMMA)
+      (key <- (lazy/p expression/p))
+      (token/p 'RPAREN)
+      (pure (store-get identifier key))))
 
 (define store-set/p
   (do (token/p 'SET)
@@ -172,6 +182,7 @@
   (or/p (try/p binary-op/p)
         store-set/p
         store-delete/p
+        store-get/p
         do-block/p
         rpc-call/p
         map-literal/p
@@ -185,11 +196,9 @@
         list-literal/p
         ident/p))
 
-(define hof/p (or/p (token/p 'MAP) (token/p 'FILTER) (token/p 'REDUCE)))
-
 (define lambda/p
   (do (token/p 'LPAREN)
-      [fn-args <- (many/p ident/p #:min 1 #:sep (token/p 'COMMA))]
+      [fn-args <- (many/p ident/p #:sep (token/p 'COMMA))]
       (token/p 'RPAREN)
       (token/p 'FAT-ARROW)
       [exprs <- expression/p]
@@ -226,7 +235,9 @@
             "Invalid special access kind! Valid field access on an SFN is `<MODULE>.deltas` or `<MODULE>.get`"]
            [else
             "This should never show up! If it does, go reach out to @blind_nabler and tell him his code is broken! Sorry!"])))))
-   (pure (sfn-delta-edge input))))
+   (pure (match mode
+           ["deltas" (sfn-delta-edge input)]
+           [_ input]))))
 
 (define module-input/p (do [input <- (or/p (try/p store-deltas/p) ident/p)] (pure input)))
 
@@ -430,6 +441,7 @@
          pipeline
          store-set
          store-delete
+         store-get
 
          sfn-delta-edge
          yaml-input-data

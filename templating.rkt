@@ -249,6 +249,9 @@ map_literal!{
 (define (store-delete/gen prefix)
   (format "{substreams_store_param.generic_delete_prefix(~a); SolidityType::Null}" prefix))
 
+(define (store-get/gen ident key)
+  (format "~a.generic_get(~a)" ident key))
+
 (define (do-block/gen exprs)
   (format "{ ~a }" (string-join exprs ";")))
 
@@ -276,6 +279,7 @@ map_literal!{
     [(mfn name inputs body _attributes) (gen mfn/gen name inputs body)]
     [(sfn name inputs body attributes) (gen sfn/gen name inputs body attributes)]
     [(store-set key value) (gen store-set/gen key value)]
+    [(store-get ident key) (gen store-get/gen ident key)]
     [(store-delete prefix) (gen store-delete/gen prefix)]
     [(lam fn-args exprs) (gen lam/gen fn-args exprs)]
     [(hof kind (lam args body)) (gen hof/gen kind args body)]
