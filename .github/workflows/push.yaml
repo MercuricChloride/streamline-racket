@@ -25,14 +25,20 @@ jobs:
       - name: Install raco-cross for cross compilation
         run: raco pkg install --skip-installed --auto raco-cross
 
-      - name: Install Package and its Dependencies
-        run: raco cross pkg install --skip-installed --auto --batch
+      - name: Install Linux Package and its Dependencies
+        run: raco cross --target x86_64-linux --skip-setup pkg install --skip-installed --auto --batch
 
       - name: Build Linux Executable
-        run: raco cross --target x86_64-linux exe -o streamline-linux ./cli.rkt
+        run: raco cross --target x86_64-linux --skip-setup exe -o streamline-linux ./cli.rkt
+
+      - name: Install M1 Packages and its Dependencies
+        run: raco cross --target aarch64-macosx --skip-setup pkg install --skip-installed --auto --batch
 
       - name: Build M1 Executable
         run: raco cross --target aarch64-macosx exe -o streamline-arm-mac ./cli.rkt
+
+      - name: Install x86 Max Executable
+        run: raco cross --target x86_64-macosx --skip-setup pkg install --skip-installed --auto --batch
 
       - name: Build x86 Mac Executable
         run: raco cross --target x86_64-macosx exe -o streamline-x86-mac ./cli.rkt
