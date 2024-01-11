@@ -29,7 +29,7 @@ jobs:
         run: raco cross pkg install --skip-installed --auto --batch
 
       - name: Build Linux Executable
-        run: raco cross --target exe -o streamline-linux ./cli.rkt
+        run: raco cross --target x86_64-linux exe -o streamline-linux ./cli.rkt
 
       - name: Build M1 Executable
         run: raco cross --target aarch64-macosx exe -o streamline-arm-mac ./cli.rkt
