@@ -6,28 +6,60 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@master
+
+      - name: Cache Racket dependencies
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cache/racket
+            ~/.local/share/racket
+          key: ${{ runner.os }}-racket-8.11
+
       - name: Install Racket
         uses: Bogdanp/setup-racket@v1.6.1
         with:
           architecture: 'x64'
           distribution: 'full'
-          version: '8.2'
+          version: '8.11'
+
+      - name: Install raco-cross for cross compilation
+        run: raco pkg install --skip-installed --auto raco-cross
 
       - name: Install Package and its Dependencies
-        run: raco pkg install --auto --batch
+        run: raco cross pkg install --skip-installed --auto --batch
 
-      - name: Build Executable
-        run: raco exe -o streamline ./cli.rkt
+      - name: Build Linux Executable
+        run: raco cross --target exe -o streamline-linux ./cli.rkt
 
-      - name: Upload Executable
+      - name: Build M1 Executable
+        run: raco cross --target aarch64-macosx exe -o streamline-arm-mac ./cli.rkt
+
+      - name: Build x86 Mac Executable
+        run: raco cross --target x86_64-macosx exe -o streamline-x86-mac ./cli.rkt
+
+      - name: Upload Linux Executable
         uses: actions/upload-artifact@v2
         with:
-          name: linux-release
-          path: ./streamline
+          name: streamline-linux
+          path: ./streamline-linux
+
+      - name: Upload M1 Executable
+        uses: actions/upload-artifact@v2
+        with:
+          name: streamline-arm-mac
+          path: ./streamline-arm-mac
+
+      - name: Upload x86 Mac Executable
+        uses: actions/upload-artifact@v2
+        with:
+          name: streamline-x86-mac
+          path: ./streamline-x86-mac
 
       - name: Release
         uses: softprops/action-gh-release@v1
-        tag_name: "linux-release"
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          name: linux-release
-          files: ./streamline
+          files: |
+            ./streamline-linux
+            ./streamline-arm-mac
+            ./streamline-x86-mac
