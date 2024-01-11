@@ -174,6 +174,14 @@ EOF
         (pretty-display "Created ~/.streamline/!")))
   (pretty-display skull))
 
+(define (streamline-run mod-name)
+  (define cmd (format "cd ~a && substreams run ~a" streamline-path mod-name))
+  (if (directory-exists? streamline-path) (system cmd) (error "Streamline path not found!")))
+
+(define (streamline-gui mod-name)
+  (define cmd (format "cd ~a && substreams gui ~a" streamline-path mod-name))
+  (if (directory-exists? streamline-path) (system cmd) (error "Streamline path not found!")))
+
 (command-line
  #:program "Streamline CLI"
  #:usage-help "Streamline CLI"
@@ -199,8 +207,13 @@ EOF
    ["run"
     (command-line #:program "Streamline Run"
                   #:argv remaining
-                  #:args (path)
-                  (generate-streamline-file path))]
+                  #:args (mod-name)
+                  (streamline-run mod-name))]
+   ["gui"
+    (command-line #:program "Streamline gui"
+                  #:argv remaining
+                  #:args (mod-name)
+                  (streamline-gui mod-name))]
    ["install" (streamline-install)]
    ["wisdom" (pretty-display pirate)]
    ["dune" (pretty-display puke)]
