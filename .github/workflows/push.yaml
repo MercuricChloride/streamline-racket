@@ -27,6 +27,7 @@ jobs:
 
       - name: Release
         uses: softprops/action-gh-release@v1
+        tag_name: "linux-release"
         with:
           name: linux-release
           files: ./streamline
