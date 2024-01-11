@@ -196,19 +196,20 @@ fn {{name}}({{inputs}}, substreams_store_param: {{store-kind}}) {
 (define (lam/gen fn-args exprs)
   (define -args (string-join fn-args ","))
   (define arg-types (fmt-args fn-args))
-  (expand "
-let output_map = (|({{args}}): ({{arg-types}})| { {{exprs}} })(output_map);
+  (expand
+   "
+let output_map: SolidityType = (|({{args}}): ({{arg-types}})| -> SolidityType { {{exprs}} })(output_map);
 "
-          (hash "args" -args "arg-types" arg-types "exprs" exprs)))
+   (hash "args" -args "arg-types" arg-types "exprs" exprs)))
 
 (define (hof/gen hof-kind fn-args exprs)
   (define -args (string-join fn-args ","))
-  ; TODO I am leaving this here, because I might want the Option Type later
-  ;let output_map:Option<SolidityType> = {{kind}}!(output_map, |{{args}}| { {{exprs}} });
-  (expand "
-  let output_map:SolidityType = {{kind}}!(output_map, |{{args}}| { {{exprs}} });
+  (define arg-types (string-join (map (lambda (_) "SolidityType") fn-args) ","))
+  (expand
+   "
+  let output_map:SolidityType = {{kind}}!(output_map, |({{args}})| -> SolidityType { {{exprs}} });
 "
-          (hash "kind" hof-kind "args" -args "exprs" exprs)))
+   (hash "kind" hof-kind "args" -args "arg-types" arg-types "exprs" exprs)))
 
 (define (map-literal/gen kvs)
   (expand "
