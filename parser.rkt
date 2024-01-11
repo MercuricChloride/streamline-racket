@@ -357,7 +357,8 @@
         [inputs (stream->list (map format-yaml-input inputs))])
     (match mod
       [(module-data "MFN" name attributes)
-       (hash "name" name "kind" "map" "output" output "inputs" inputs)]
+       (hash "name" name "kind" "map" "output" output "inputs" inputs "initialBlock" 18812993)]
+
       [(module-data "SFN" name attributes)
        (hash "name"
              name
@@ -368,7 +369,9 @@
              "valueType"
              "proto:google.protobuf.Struct"
              "inputs"
-             inputs)]
+             inputs
+             "initialBlock"
+             18812993)]
       [_ #f])))
 
 (define (parse-file! tokenized-input)

@@ -241,13 +241,7 @@ map_literal!{
   (expand-string "
 {{name}}!({{fn}}Call, {{args}})
 "
-                 (hash "name"
-                       name
-                       "fn"
-                       fn
-                       "args"
-                       (string-join (map (lambda (arg) (format "~a" (generate-code arg))) args)
-                                    ","))))
+                 (hash "name" name "fn" fn "args" (string-join (map generate-code args) ","))))
 
 (define (store-set/gen key value)
   (format "{substreams_store_param.generic_set(~a, ~a); SolidityType::Null}" key value))
