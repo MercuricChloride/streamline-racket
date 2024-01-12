@@ -1,6 +1,10 @@
-#lang racket
+#lang racket/base
 
-(require "./templating.rkt")
+(require racket/system
+         racket/pretty
+         racket/cmdline
+         racket/match
+         "./templating.rkt")
 
 (define puke
   #<<EOF

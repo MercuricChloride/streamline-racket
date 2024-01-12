@@ -1,9 +1,16 @@
-#lang racket
+#lang racket/base
 
-(require dali)
-(require yaml)
-(require "./lexer.rkt")
-(require "./parser.rkt")
+(require racket/string
+         racket/port
+         racket/system
+         racket/list
+         racket/bool
+         racket/match
+         racket/pretty
+         dali
+         yaml
+         "./lexer.rkt"
+         "./parser.rkt")
 
 ; The dali template library escapes a bunch of characters, we don't need this.
 ; So we just set the escape-replacements parameter to be effectively nothing. (it checks for an empty list)

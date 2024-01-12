@@ -10,9 +10,6 @@ mfn miladyTransfers = EVENTS
 mfn baycTransfers = EVENTS
     |> (events) => events.bayc.Transfer;
 
-mfn azukiTransfers = EVENTS
-    |> (events) => events.azuki.Transfer;
-
 @immutable
 sfn storeAzukiOwners = EVENTS
     |> (events) => events.azuki.Transfer;
@@ -20,3 +17,7 @@ sfn storeAzukiOwners = EVENTS
 
 mfn mapAzukiOwnerChanges = storeAzukiOwners.deltas
     |> (deltas) => deltas;
+
+mfn azukiTransfers = EVENTS
+    |> (events) => events.azuki.Transfer;
+    |> map (transfer) => transfer._tokenId + "hello";

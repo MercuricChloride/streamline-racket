@@ -1,12 +1,14 @@
-#lang racket
+#lang racket/base
 
-(require megaparsack
+(require racket/match
+         racket/list
+         racket/bool
+         racket/stream
+         megaparsack
          megaparsack/parser-tools/lex
          data/monad
          data/functor
-         data/applicative
-         dali
-         "./lexer.rkt")
+         data/applicative)
 
 (struct module-data (kind name attributes) #:prefab)
 (struct edge-data (from to mode) #:prefab)
@@ -104,31 +106,44 @@
       (token/p 'RCURLY)
       (pure (do-block exprs))))
 
+(define group/p (do (token/p 'LPAREN) [expr <- (lazy/p expression/p)] (token/p 'RPAREN) (pure expr)))
+(define ident/p (do [ident <- (token/p 'IDENTIFIER)] (pure ident)))
+
 (define literal/p
   (do [literal
        <-
-       (or/p true/p
+       (or/p group/p
+             true/p
              false/p
              string-literal/p
              number-literal/p
              address-literal/p
              tuple-literal/p
-             list-literal/p)]
+             list-literal/p
+             (lazy/p map-literal/p)
+             ident/p)]
       (pure literal)))
 
-(define ident/p (do [ident <- (token/p 'IDENTIFIER)] (pure ident)))
 (define type/p (do (ident <- ident/p) (pure ident)))
 
-(define (flatten-field-access rh)
-  (match rh
-    [(field-access lh rh) (flatten (list lh (flatten-field-access rh)))]
-    [_ (list rh)]))
+;; (define (flatten-field-access rh)
+;;   (match rh
+;;     [(field-access lh rh) (flatten (list lh (flatten-field-access rh)))]
+;;     [_ (list rh)]))
+;; (define field-access/p
+;;   (do [lh <- (or/p ident/p literal/p)]
+;;       (token/p 'DOT)
+;;       (rh <- (or/p (try/p field-access/p) ident/p number-literal/p))
+;;       (pure (field-access lh (flatten-field-access rh)))))
+
+(define field-access-start/p (do [lh <- literal/p] (pure lh)))
+
+(define field-access-end/p (do (token/p 'DOT) [rh <- literal/p] (pure rh)))
 
 (define field-access/p
-  (do [lh <- (or/p ident/p literal/p)]
-      (token/p 'DOT)
-      (rh <- (or/p (try/p field-access/p) ident/p number-literal/p))
-      (pure (field-access lh (flatten-field-access rh)))))
+  (do [lh <- field-access-start/p]
+      (rhs <- (many+/p field-access-end/p))
+      (pure (field-access lh rhs))))
 
 (define key-value/p
   (do [key <- ident/p] (token/p 'COLON) [val <- (lazy/p expression/p)] (pure (key-value key val))))
@@ -150,10 +165,14 @@
                 (token/p 'NOT)))
       (pure op)))
 
+(define binary-op-start/p (do (lh <- (or/p (try/p field-access/p) literal/p)) (pure lh)))
+(define binary-op-end/p
+  (do [op <- binary-operators/p] [rh <- (or/p (try/p field-access/p) literal/p)] (pure (list op rh))))
+
 (define binary-op/p
-  (do [lh <- (or/p literal/p ident/p (try/p field-access/p))]
+  (do [lh <- binary-op-start/p]
       [op <- binary-operators/p]
-      [rh <- (lazy/p expression/p)]
+      [rh <- (or/p (try/p binary-op/p) binary-op-start/p)]
       (pure (binary-op lh op rh))))
 
 (define map-literal/p
@@ -185,24 +204,16 @@
         store-get/p
         do-block/p
         rpc-call/p
-        map-literal/p
-        true/p
-        false/p
-        string-literal/p
-        number-literal/p
-        address-literal/p
         (try/p field-access/p)
-        tuple-literal/p
-        list-literal/p
-        ident/p))
+        literal/p))
 
 (define lambda/p
   (do (token/p 'LPAREN)
       [fn-args <- (many/p ident/p #:sep (token/p 'COMMA))]
       (token/p 'RPAREN)
       (token/p 'FAT-ARROW)
-      [exprs <- expression/p]
-      (pure (lam fn-args exprs))))
+      [expr <- expression/p]
+      (pure (lam fn-args expr))))
 
 (define map/p (do (token/p 'MAP) [callback <- lambda/p] (pure (hof "map" callback))))
 
@@ -395,7 +406,9 @@
       [_ #f])))
 
 (define (parse-file! tokenized-input)
-  (match (parse-result! (parse-tokens streamline/p tokenized-input))
+  (define result (parse-result! (parse-tokens streamline/p tokenized-input)))
+  (print result)
+  (match result
     [(list parsed-file modules edges)
      (begin
        (define nodes

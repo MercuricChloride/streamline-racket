@@ -1,5 +1,7 @@
-#lang racket
-(require parser-tools/lex)
+#lang racket/base
+(require parser-tools/lex
+         racket/match
+         racket/string)
 (require (prefix-in : parser-tools/lex-sre))
 
 (define-lex-abbrevs
