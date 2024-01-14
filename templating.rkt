@@ -16,6 +16,10 @@
 ; So we just set the escape-replacements parameter to be effectively nothing. (it checks for an empty list)
 (escape-replacements '(("&" . "&")))
 
+; This is a param that should return true whenever we are generating code in a fn body.
+; This will just change what we generate slightly
+(define in-fn? (make-parameter #f))
+
 (define streamline-path
   (string-replace (with-output-to-string (lambda () (system "echo $HOME/.streamline/"))) "\n" ""))
 
@@ -50,6 +54,10 @@ binaries:
   (expand-string str kvs))
 
 (define-syntax-rule (gen proc args ...) (apply proc (map generate-code (list args ...))))
+;; A little helper macro that wraps the proc in a parameterize that declares it to generate as though it were a function body rather than top level.
+(define-syntax-rule (in-fn arg)
+  (parameterize ([in-fn? true])
+    arg))
 
 ;; Data for generating contract source code
 (struct source-data (sol-macro name events))

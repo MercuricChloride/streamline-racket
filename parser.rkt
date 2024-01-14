@@ -126,16 +126,6 @@
 
 (define type/p (do (ident <- ident/p) (pure ident)))
 
-;; (define (flatten-field-access rh)
-;;   (match rh
-;;     [(field-access lh rh) (flatten (list lh (flatten-field-access rh)))]
-;;     [_ (list rh)]))
-;; (define field-access/p
-;;   (do [lh <- (or/p ident/p literal/p)]
-;;       (token/p 'DOT)
-;;       (rh <- (or/p (try/p field-access/p) ident/p number-literal/p))
-;;       (pure (field-access lh (flatten-field-access rh)))))
-
 (define field-access-start/p (do [lh <- literal/p] (pure lh)))
 
 (define field-access-end/p (do (token/p 'DOT) [rh <- literal/p] (pure rh)))
@@ -175,15 +165,16 @@
       [rh <- (or/p (try/p binary-op/p) binary-op-start/p)]
       (pure (binary-op lh op rh))))
 
+(define map-closing/p
+  (do (or/p (try/p (list/p (token/p 'COMMA) (token/p 'RCURLY))) (token/p 'RCURLY))))
+
 (define map-literal/p
   (do (token/p 'LCURLY)
-      [kvs <- (many/p key-value/p #:min 1 #:sep (token/p 'COMMA))]
-      (many/p #:max 1 (token/p 'COMMA))
-      (token/p 'RCURLY)
-      (pure (map-literal kvs))))
-
-(define typed-field/p
-  (do (ident <- ident/p) (token/p 'COLON) (type <- type/p) (pure (typed-field ident type))))
+      ;; NOTE This returns a list of 2. The car of the list is the key-value/p match
+      ;; And the cdr of the list is the match of map-closing/p.
+      ;; We don't care about the end match, so we just return the car of the kvs in the final output
+      [kvs <- (many+-until/p key-value/p #:end map-closing/p)]
+      (pure (map-literal (car kvs)))))
 
 ; TODO I need to add loading instances at an address
 (define rpc-call/p
