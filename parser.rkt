@@ -4,6 +4,7 @@
          racket/list
          racket/bool
          racket/stream
+         racket/set
          megaparsack
          megaparsack/parser-tools/lex
          data/monad
@@ -22,7 +23,32 @@
   (make-parser-parameter (cons (edge-data "BLOCK" "EVENTS" "default")
                                '()))) ; This is a list of edges from module name -> module name
 
+;; Used to modify how the attribute parsers operate
+;; Because the attributes for sfns and mfns are all different
+(define current-module-type (make-parser-parameter #f))
+
 (define sfn-access-types `("deltas" "get"))
+
+;; A tag attribute, is an attribute that doesn't have a value.
+;; Ie the @immutable tag.
+(define tag-attributes `("immutable"))
+(define sfn-tag-attributes (set-subtract tag-attributes '()))
+(define mfn-tag-attributes (set-subtract tag-attributes '("immutable")))
+
+;; An value-attribute, is an attribute that does have a value
+;; Ie the @startBlock tag.
+;; @startBlock 12345
+(define value-attributes `("startBlock"))
+(define sfn-value-attributes (set-subtract value-attributes '()))
+(define mfn-value-attributes (set-subtract value-attributes '()))
+
+;; A key-value-attribute, is an attribute that has a key and a value
+;; Ie the @const tag.
+;; @const foo = bar
+;; @var foo = bar
+(define kv-attributes `("const" "var"))
+(define sfn-kv-attributes (set-subtract kv-attributes '()))
+(define mfn-kv-attributes (set-subtract kv-attributes '()))
 
 ;; STRUCTS
 (struct primitive-value (value) #:prefab) ; IE Boolean etc
@@ -30,6 +56,10 @@
 (struct type (name) #:prefab) ; foo
 (struct typed-field (name type) #:prefab) ; id: address
 (struct rpc-call (instance-name fn-name args) #:prefab) ; ERC721.#ownerOf(id: address)#
+
+(struct tag-attribute (name) #:prefab) ; @immutable
+(struct value-attribute (name value) #:prefab) ; @startBlock 12345
+(struct kv-attribute (name key value) #:prefab) ; @const foo = bar
 
 (struct map-literal (kvs) #:prefab) ; { ... }
 (struct string-literal (str) #:prefab) ; "hi"
@@ -45,7 +75,7 @@
 (struct store-delete (prefix) #:prefab) ; delete("hello");
 (struct store-get (ident key) #:prefab) ; get(storeBids, "hello");
 (struct do-block (expressions) #:prefab) ; do {...};
-(struct function-call (function args) #:prefab) ; uint(asdfsadf)
+(struct function-call (name args) #:prefab) ; uint("12345")
 
 (struct lam (args body) #:prefab) ; (foo) => bar;
 (struct hof (hof callback) #:prefab) ; map (foo) => bar;
@@ -229,6 +259,7 @@
 
 (define pipeline/p (do [applications <- (many/p functor/p #:min 1)] (pure (pipeline applications))))
 
+;; TODO I need to update this name to be store-access-type
 (define store-deltas/p
   (do
    (modules <- (declared-modules))
@@ -276,16 +307,62 @@
                      "EVENTS is a restricted module name. Please choose a different name!"))
       (pure name)))
 
+(define (valid-tag-attribute? ident)
+  (do [module-type <- (current-module-type)]
+      (pure (match module-type
+              ["MFN" (member ident mfn-tag-attributes)]
+              ["SFN" (member ident sfn-tag-attributes)]))))
+
+(define (valid-value-attribute? ident)
+  (do [module-type <- (current-module-type)]
+      (pure (match module-type
+              ["MFN" (member ident mfn-value-attributes)]
+              ["SFN" (member ident sfn-value-attributes)]))))
+
+(define (valid-kv-attribute? ident)
+  (do [module-type <- (current-module-type)]
+      (pure (match module-type
+              ["MFN" (member ident mfn-kv-attributes)]
+              ["SFN" (member ident sfn-kv-attributes)]))))
+
+(define tag-attribute/p
+  (do (token/p 'AT)
+      (tag <-
+           (guard/p ident/p
+                    valid-tag-attribute?
+                    (format "Invalid tag attribute! Please use on of the following: ~a"
+                            tag-attributes)))
+      (pure (tag-attribute tag))))
+
+(define value-attribute/p
+  (do (token/p 'AT)
+      (name <- ident/p)
+      (value <- (or/p (try/p store-deltas/p) literal/p))
+      (satisfy/p (λ () (valid-value-attribute? name)))
+      (pure (value-attribute name value))))
+
+(define kv-attribute/p
+  (do (token/p 'AT)
+      (name <- ident/p)
+      (key <- ident/p)
+      (token/p 'ASSIGNMENT)
+      (value <- (or/p (try/p store-deltas/p) literal/p))
+      (satisfy/p (λ () (valid-kv-attribute? name)))
+      (pure (kv-attribute name key value))))
+
+(define attribute/p
+  (do (attr <- (or/p (try/p kv-attribute/p) (try/p value-attribute/p) (tag-attribute/p)))
+      (pure attr)))
+
 (define attr-immutable/p
   (do (token/p 'AT)
       (immutable <- (guard/p ident/p (lambda (ident) (equal? ident "immutable"))))
       (pure immutable)))
 
-(define sfn-attributes/p
-  (do (attributes <- (many*/p (or/p (try/p attr-immutable/p)))) (pure attributes)))
-
 (define mfn/p
-  (do (token/p 'MFN)
+  (do (current-module-type "MFN")
+      (attributes <- (many*/p attribute/p))
+      (token/p 'MFN)
       [modules <- (declared-modules)]
       [edges <- (declared-edges)]
       [name
@@ -317,7 +394,8 @@
       (pure (mfn name inputs pipeline '()))))
 
 (define sfn/p
-  (do (attributes <- sfn-attributes/p)
+  (do (current-module-type "SFN")
+      (attributes <- (many*/p attribute/p))
       (token/p 'SFN)
       [modules <- (declared-modules)]
       [edges <- (declared-edges)]
