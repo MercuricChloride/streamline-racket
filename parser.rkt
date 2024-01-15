@@ -45,6 +45,7 @@
 (struct store-delete (prefix) #:prefab) ; delete("hello");
 (struct store-get (ident key) #:prefab) ; get(storeBids, "hello");
 (struct do-block (expressions) #:prefab) ; do {...};
+(struct function-call (function args) #:prefab) ; uint(asdfsadf)
 
 (struct lam (args body) #:prefab) ; (foo) => bar;
 (struct hof (hof callback) #:prefab) ; map (foo) => bar;
@@ -126,6 +127,19 @@
 
 (define type/p (do (ident <- ident/p) (pure ident)))
 
+(define function-call-close/p
+  (do (or/p (try/p (list/p (token/p 'COMMA) (token/p 'RPAREN))) (token/p 'RPAREN))))
+
+(define function-call/p
+  (do
+   [function-name <- ident/p]
+   (token/p 'LPAREN)
+   ;; NOTE This returns a list of 2. The car of the list is the key-value/p match
+   ;; And the cdr of the list is the match of the closing parser
+   ;; We don't care about the end match, so we just return the car of the return
+   [args <- (many+-until/p (lazy/p expression/p) #:end function-call-close/p #:sep (token/p 'COMMA))]
+   (pure (function-call function-name (car args)))))
+
 (define field-access-start/p (do [lh <- literal/p] (pure lh)))
 
 (define field-access-end/p (do (token/p 'DOT) [rh <- literal/p] (pure rh)))
@@ -173,7 +187,7 @@
       ;; NOTE This returns a list of 2. The car of the list is the key-value/p match
       ;; And the cdr of the list is the match of map-closing/p.
       ;; We don't care about the end match, so we just return the car of the kvs in the final output
-      [kvs <- (many+-until/p key-value/p #:end map-closing/p)]
+      [kvs <- (many+-until/p key-value/p #:end map-closing/p #:sep (token/p 'COMMA))]
       (pure (map-literal (car kvs)))))
 
 ; TODO I need to add loading instances at an address
@@ -193,6 +207,7 @@
         store-set/p
         store-delete/p
         store-get/p
+        (try/p function-call/p)
         do-block/p
         rpc-call/p
         (try/p field-access/p)
@@ -446,6 +461,7 @@
          store-set
          store-delete
          store-get
+         function-call
 
          sfn-delta-edge
          yaml-input-data

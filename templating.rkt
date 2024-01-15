@@ -270,6 +270,9 @@ map_literal!{
 (define (do-block/gen exprs)
   (format "{ ~a }" (string-join exprs ";")))
 
+(define (function-call/gen name args)
+  (format "~a(~a)" name (string-join args ",")))
+
 (define (write-string-to-file string filename)
   (with-output-to-file filename (lambda () (pretty-display string)) #:exists 'replace))
 
@@ -279,6 +282,7 @@ map_literal!{
     [(rpc-call instance fn args) (gen rpc-call/gen instance fn args)]
     [(do-block exprs) (do-block/gen (map generate-code exprs))]
     [(map-literal kvs) (map-literal/gen (map generate-code kvs))]
+    [(function-call name args) (function-call/gen name (map generate-code args))]
 
     [(key-value key val) (gen key-value/gen key val)]
     [(identifier name) (gen symbol->string name)]
