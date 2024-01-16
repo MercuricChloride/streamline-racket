@@ -126,13 +126,14 @@ sol! {
   (define vars
     (filter (λ (attribute)
               (match attribute
-                [(kv-attribute "var" key value) true]
+                [(kv-attribute "var" _ _) true]
                 [_ false]))
             attributes))
   (define var-code
     (map (λ (var)
            (match var
-             [(kv-attribute "var" k v) (format "let mut ~a = ~a;" k (generate-code v))]))
+             [(kv-attribute "var" k v)
+              (format "let mut ~a:LocalVar = LocalVar::from(~a);" k (generate-code v))]))
          vars))
 
   (string-join var-code "\n"))
@@ -299,7 +300,7 @@ map_literal!{
   (format "~a(~a)" name (string-join args ",")))
 
 (define (var-assignment/gen var value)
-  (format "{~a = ~a; SolidityType::Null}" var value))
+  (format "{~a = LocalVar::from(~a); SolidityType::Null}" var value))
 
 (define (write-string-to-file string filename)
   (with-output-to-file filename (lambda () (pretty-display string)) #:exists 'replace))
