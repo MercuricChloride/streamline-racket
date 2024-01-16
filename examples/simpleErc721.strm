@@ -15,9 +15,13 @@ sfn storeAzukiOwners = EVENTS
     |> (events) => events.azuki.Transfer;
     |> map (t) => set(t._tokenId, t._to);
 
-mfn mapAzukiOwnerChanges = storeAzukiOwners.deltas
-    |> map (delta) => {
-       foo: 123,
+@var foo = "420"
+mfn mapAzukiOwnerChanges = [storeAzukiOwners.deltas]
+    |> (deltas) => do{
+       foo = uint(foo) + 1;
+       {
+        foo: foo
+       }
     };
 
 mfn azukiTransfers = EVENTS

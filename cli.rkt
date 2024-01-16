@@ -188,15 +188,6 @@ EOF
  "The best way to build substreams. Made with <3 by Spyglass Labs!\n"
  "This software is in Beta, so please reach out to us if anything breaks and we will help you as quick as we can!\n"
  "Contact links available at spygpc.com! :)"
- ;#:once-each [("-o" "--output")
- ; MY-PARAMETER-NAME
- ; "write a short description of what setting MY-PARAMETER-NAME does"
- ; (my-parameter (string->number MY-PARAMETER-NAME))]
- ;[("-a" "--another-parameter")
- ; ANOTHER-PARAM
- ; "a little description of ANOTHER-PARAM"
- ; (another-parameter (string=? "true" ANOTHER-PARAM))]
- ;[("-s" "--string") A-STRING "what is A-STRING?" (a-string A-STRING)]
  #:args [cmd . remaining]
  (match cmd
    ["build"

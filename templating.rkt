@@ -122,7 +122,22 @@ sol! {
 " (hash "solidity" replaced-source))])
     (source-data sol-macro (first name) (flatten events))))
 
-(define (mfn/gen name inputs body)
+(define (attr-vars/gen attributes)
+  (define vars
+    (filter (λ (attribute)
+              (match attribute
+                [(kv-attribute "var" key value) true]
+                [_ false]))
+            attributes))
+  (define var-code
+    (map (λ (var)
+           (match var
+             [(kv-attribute "var" k v) (format "let mut ~a = ~a;" k (generate-code v))]))
+         vars))
+
+  (string-join var-code "\n"))
+
+(define (mfn/gen name inputs body attributes)
   (define formatted-inputs
     (map (lambda (input)
            (match input
@@ -145,10 +160,13 @@ sol! {
         (format "let output_map = (~a);" (string-join formatted-inputs ", "))))
 
   (define format-inputs (format "format_inputs!(~a);" (string-join formatted-inputs ",")))
+
+  (define local-vars (attr-vars/gen attributes))
   (expand
    "
 #[substreams::handlers::map]
 fn {{name}}({{inputs}}) -> Option<prost_wkt_types::Struct> {
+    {{local-vars}}
     {{format-inputs}}
     with_map! {output_map,
       {{initial-value}}
@@ -165,7 +183,9 @@ fn {{name}}({{inputs}}) -> Option<prost_wkt_types::Struct> {
          "body"
          body
          "initial-value"
-         initial-value)))
+         initial-value
+         "local-vars"
+         local-vars)))
 
 (define (sfn/gen name inputs body attributes)
   (define -inputs
@@ -183,10 +203,13 @@ fn {{name}}({{inputs}}) -> Option<prost_wkt_types::Struct> {
         "StoreSetIfNotExistsProto<prost_wkt_types::Struct>"
         "StoreSetProto<prost_wkt_types::Struct>"))
 
+  (define local-vars (attr-vars/gen attributes))
+
   (expand
    "
 #[substreams::handlers::store]
 fn {{name}}({{inputs}}, substreams_store_param: {{store-kind}}) {
+    {{local-vars}}
     {{format-inputs}}
     {{initial-value}}
     {{body}}
@@ -203,7 +226,9 @@ fn {{name}}({{inputs}}, substreams_store_param: {{store-kind}}) {
          "initial-value"
          initial-value
          "store-kind"
-         store-kind)))
+         store-kind
+         "local-vars"
+         local-vars)))
 
 (define (fmt-args args)
   (string-join (map (lambda (_) "SolidityType") args) ","))
@@ -273,6 +298,9 @@ map_literal!{
 (define (function-call/gen name args)
   (format "~a(~a)" name (string-join args ",")))
 
+(define (var-assignment/gen var value)
+  (format "{~a = ~a; SolidityType::Null}" var value))
+
 (define (write-string-to-file string filename)
   (with-output-to-file filename (lambda () (pretty-display string)) #:exists 'replace))
 
@@ -295,8 +323,9 @@ map_literal!{
      (format "SolidityType::Tuple(vec![~a])" (string-join (map generate-code vals) ","))]
     [(list-literal vals)
      (format "SolidityType::List(vec![~a])" (string-join (map generate-code vals) ","))]
-    [(mfn name inputs body _attributes) (gen mfn/gen name inputs body)]
+    [(mfn name inputs body attributes) (gen mfn/gen name inputs body attributes)]
     [(sfn name inputs body attributes) (gen sfn/gen name inputs body attributes)]
+    [(var-assignment var value) (gen var-assignment/gen var value)]
     [(store-set key value) (gen store-set/gen key value)]
     [(store-get ident key) (gen store-get/gen ident key)]
     [(store-delete prefix) (gen store-delete/gen prefix)]

@@ -76,6 +76,7 @@
 (struct store-get (ident key) #:prefab) ; get(storeBids, "hello");
 (struct do-block (expressions) #:prefab) ; do {...};
 (struct function-call (name args) #:prefab) ; uint("12345")
+(struct var-assignment (var value) #:prefab) ; foo = 42
 
 (struct lam (args body) #:prefab) ; (foo) => bar;
 (struct hof (hof callback) #:prefab) ; map (foo) => bar;
@@ -143,7 +144,8 @@
 (define literal/p
   (do [literal
        <-
-       (or/p group/p
+       (or/p (try/p (lazy/p function-call/p))
+             group/p
              true/p
              false/p
              string-literal/p
@@ -232,12 +234,20 @@
       (token/p 'HASH)
       (pure (rpc-call instance-name fn-name args))))
 
+;; TODO I need to add a guard to this to make sure variables are in scope
+(define var-assignment/p
+  (do (var <- ident/p)
+      (token/p 'ASSIGNMENT)
+      (value <- (lazy/p expression/p))
+      (pure (var-assignment var value))))
+
 (define expression/p
   (or/p (try/p binary-op/p)
         store-set/p
         store-delete/p
         store-get/p
         (try/p function-call/p)
+        (try/p var-assignment/p)
         do-block/p
         rpc-call/p
         (try/p field-access/p)
@@ -259,8 +269,7 @@
 
 (define pipeline/p (do [applications <- (many/p functor/p #:min 1)] (pure (pipeline applications))))
 
-;; TODO I need to update this name to be store-access-type
-(define store-deltas/p
+(define store-access-type/p
   (do
    (modules <- (declared-modules))
    (input <- ident/p)
@@ -287,7 +296,7 @@
            ["deltas" (sfn-delta-edge input)]
            [_ input]))))
 
-(define module-input/p (do [input <- (or/p (try/p store-deltas/p) ident/p)] (pure input)))
+(define module-input/p (do [input <- (or/p (try/p store-access-type/p) ident/p)] (pure input)))
 
 (define many-module-inputs/p
   (do (token/p 'LBRACKET)
@@ -307,68 +316,130 @@
                      "EVENTS is a restricted module name. Please choose a different name!"))
       (pure name)))
 
-(define (valid-tag-attribute? ident)
+(define valid-tag-attribute/p
   (do [module-type <- (current-module-type)]
-      (pure (match module-type
-              ["MFN" (member ident mfn-tag-attributes)]
-              ["SFN" (member ident sfn-tag-attributes)]))))
+      [ident
+       <-
+       (guard/p
+        ident/p
+        (λ (ident)
+          (match module-type
+            ["MFN" (member ident mfn-tag-attributes)]
+            ["SFN" (member ident sfn-tag-attributes)]))
+        #f
+        (λ (ident)
+          (match module-type
+            ["MFN"
+             (format "Invalid tag attribute ~a. Please use one of the following for MFN modules: ~a"
+                     ident
+                     mfn-tag-attributes)]
+            ["SFN"
+             (format "Invalid tag attribute ~a. Please use one of the following for SFN modules: ~a"
+                     ident
+                     sfn-tag-attributes)])))]
+      (pure ident)))
 
-(define (valid-value-attribute? ident)
+(define valid-value-attribute/p
   (do [module-type <- (current-module-type)]
-      (pure (match module-type
-              ["MFN" (member ident mfn-value-attributes)]
-              ["SFN" (member ident sfn-value-attributes)]))))
+      [ident
+       <-
+       (guard/p
+        ident/p
+        (λ (ident)
+          (match module-type
+            ["MFN" (member ident mfn-value-attributes)]
+            ["SFN" (member ident sfn-value-attributes)]))
+        #f
+        (λ (ident)
+          (match module-type
+            ["MFN"
+             (format "Invalid value attribute. Please use one of the following for MFN modules: ~a"
+                     mfn-value-attributes)]
+            ["SFN"
+             (format "Invalid value attribute. Please use one of the following for SFN modules: ~a"
+                     sfn-value-attributes)])))]
+      (pure ident)))
 
-(define (valid-kv-attribute? ident)
+(define valid-kv-attribute/p
   (do [module-type <- (current-module-type)]
-      (pure (match module-type
-              ["MFN" (member ident mfn-kv-attributes)]
-              ["SFN" (member ident sfn-kv-attributes)]))))
+      [ident
+       <-
+       (guard/p
+        ident/p
+        (λ (ident)
+          (match module-type
+            ["MFN" (member ident mfn-kv-attributes)]
+            ["SFN" (member ident sfn-kv-attributes)]))
+        #f
+        (λ (ident)
+          (match module-type
+            ["MFN"
+             (format
+              "Invalid key-value attribute ~a. Please use one of the following for MFN modules: ~a"
+              ident
+              mfn-kv-attributes)]
+            ["SFN"
+             (format
+              "Invalid key-value attribute ~a. Please use one of the following for SFN modules: ~a"
+              ident
+              sfn-kv-attributes)])))]
+      (pure ident)))
 
 (define tag-attribute/p
-  (do (token/p 'AT)
-      (tag <-
+  (do (tag <-
            (guard/p ident/p
-                    valid-tag-attribute?
-                    (format "Invalid tag attribute! Please use on of the following: ~a"
-                            tag-attributes)))
+                    (λ (ident) (member ident tag-attributes))
+                    #f
+                    (λ (ident)
+                      (format "Invalid tag attribute: ~a, use one of the following! ~a"
+                              ident
+                              tag-attributes))))
       (pure (tag-attribute tag))))
 
 (define value-attribute/p
-  (do (token/p 'AT)
-      (name <- ident/p)
-      (value <- (or/p (try/p store-deltas/p) literal/p))
-      (satisfy/p (λ () (valid-value-attribute? name)))
+  (do (name <-
+            (guard/p ident/p
+                     (λ (ident) (member ident value-attributes))
+                     #f
+                     (λ (ident)
+                       (format "Invalid value attribute: ~a, use one of the following! ~a"
+                               ident
+                               value-attributes))))
+      (value <- (or/p (try/p store-access-type/p) literal/p))
       (pure (value-attribute name value))))
 
 (define kv-attribute/p
-  (do (token/p 'AT)
-      (name <- ident/p)
+  (do (name <-
+            (guard/p ident/p
+                     (λ (ident) (member ident kv-attributes))
+                     #f
+                     (λ (ident)
+                       (format "Invalid key value attribute: ~a, use one of the following! ~a"
+                               ident
+                               kv-attributes))))
       (key <- ident/p)
       (token/p 'ASSIGNMENT)
-      (value <- (or/p (try/p store-deltas/p) literal/p))
-      (satisfy/p (λ () (valid-kv-attribute? name)))
+      (value <- (or/p (try/p store-access-type/p) literal/p))
       (pure (kv-attribute name key value))))
 
 (define attribute/p
-  (do (attr <- (or/p (try/p kv-attribute/p) (try/p value-attribute/p) (tag-attribute/p)))
-      (pure attr)))
-
-(define attr-immutable/p
   (do (token/p 'AT)
-      (immutable <- (guard/p ident/p (lambda (ident) (equal? ident "immutable"))))
-      (pure immutable)))
+      (attribute <- (or/p (try/p kv-attribute/p) (try/p value-attribute/p) (try/p tag-attribute/p)))
+      (pure attribute)))
 
-(define mfn/p
-  (do (current-module-type "MFN")
-      (attributes <- (many*/p attribute/p))
-      (token/p 'MFN)
+;; (define attribute/p
+;;   (do (attr <- (or/p (try/p kv-attribute/p) (try/p value-attribute/p) (try/p tag-attribute/p)))
+;;       (pure attr)))
+
+(define mfn-lookahead/p (lookahead/p (do (attributes <- (many*/p attribute/p)) (token/p 'MFN))))
+(define (mfn/p attributes)
+  (do (token/p 'MFN)
       [modules <- (declared-modules)]
       [edges <- (declared-edges)]
       [name
        <-
        (guard/p module-name/p
-                (lambda (name) (not (hash-has-key? modules name)))
+                (λ (name) (not (hash-has-key? modules name)))
                 "This module name already has been defined!")]
       (declared-modules (let ([ht (hash-copy modules)])
                           (hash-set! ht name (module-data "MFN" name '()))
@@ -391,12 +462,10 @@
                                               [_ (edge-data input name "default")]))
                                           inputs)))
       [pipeline <- pipeline/p]
-      (pure (mfn name inputs pipeline '()))))
+      (pure (mfn name inputs pipeline attributes))))
 
-(define sfn/p
-  (do (current-module-type "SFN")
-      (attributes <- (many*/p attribute/p))
-      (token/p 'SFN)
+(define (sfn/p attributes)
+  (do (token/p 'SFN)
       [modules <- (declared-modules)]
       [edges <- (declared-edges)]
       [name
@@ -427,7 +496,10 @@
       [pipeline <- pipeline/p]
       (pure (sfn name inputs pipeline attributes))))
 
-(define module-def/p (or/p mfn/p sfn/p))
+(define module-def/p
+  (do (attributes <- (many*/p attribute/p))
+      (mod <- (or/p (mfn/p attributes) (sfn/p attributes)))
+      (pure mod)))
 
 (define source-def/p
   (do (token/p 'SOURCE) (path <- (token/p 'STRING)) (token/p 'SEMI) (pure (source-def path))))
@@ -501,7 +573,6 @@
                          ;; Find modules inputs
                          (filter-map (lambda (edge)
                                        (define module-name (module-data-name mod))
-
                                        (if (equal? (edge-data-to edge) module-name)
                                            (let* ([from-module (hash-ref modules
                                                                          (edge-data-from edge))]
@@ -540,6 +611,11 @@
          store-delete
          store-get
          function-call
+         var-assignment
+
+         tag-attribute
+         value-attribute
+         kv-attribute
 
          sfn-delta-edge
          yaml-input-data
@@ -548,3 +624,9 @@
          sfn
          source-def
          instance-def)
+
+;; (define file-port (open-input-file "examples/simpleErc721.strm"))
+;; (require "lexer.rkt")
+;; (define tokenized (tokenize file-port))
+;; tokenized
+;; (parse-file! tokenized)
