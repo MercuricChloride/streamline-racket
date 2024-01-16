@@ -19,7 +19,8 @@
  (boolean? (:or "true" "false")))
 
 (define-tokens common-tokens (IDENTIFIER OPERATOR NUMBER ADDRESS STRING))
-(define-empty-tokens keyword-tokens (MFN SFN MAP FILTER REDUCE TRUE FALSE SOURCE SET DELETE DO GET))
+(define-empty-tokens keyword-tokens
+                     (MFN SFN FN MAP FILTER REDUCE TRUE FALSE SOURCE SET DELETE DO GET))
 (define-tokens operator-tokens
                (PLUS MINUS MUL DIV EQ NOT-EQ LT GT LTE GTE AND OR NOT PIPE ASSIGNMENT))
 (define-empty-tokens punct-tokens
@@ -78,6 +79,7 @@
   (match str
     ["mfn" token-MFN]
     ["sfn" token-SFN]
+    ["fn" token-FN]
     ["set" token-SET]
     ["delete" token-DELETE]
     ["map" token-MAP]

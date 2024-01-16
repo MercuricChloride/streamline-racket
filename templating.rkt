@@ -231,6 +231,41 @@ fn {{name}}({{inputs}}, substreams_store_param: {{store-kind}}) {
          "local-vars"
          local-vars)))
 
+(define (fn/gen name inputs body attributes)
+  (define -inputs (string-join (map (lambda (input) (format "~a: LocalVar" input)) inputs) ","))
+
+  (define initial-value
+    (if (= (length inputs) 1)
+        (format "let output_map = ~a;" (first inputs))
+        (format "let output_map = (~a);" (string-join inputs ", "))))
+
+  (define format-inputs (format "format_inputs!(~a);" (string-join inputs ",")))
+
+  (define local-vars (attr-vars/gen attributes))
+
+  (expand
+   "
+fn {{name}}({{inputs}}) -> SolidityType {
+    {{local-vars}}
+    {{format-inputs}}
+    {{initial-value}}
+    {{body}}
+    output_map
+}
+"
+   (hash "name"
+         name
+         "inputs"
+         -inputs
+         "format-inputs"
+         format-inputs
+         "body"
+         body
+         "initial-value"
+         initial-value
+         "local-vars"
+         local-vars)))
+
 (define (fmt-args args)
   (string-join (map (lambda (_) "SolidityType") args) ","))
 
@@ -326,6 +361,7 @@ map_literal!{
      (format "SolidityType::List(vec![~a])" (string-join (map generate-code vals) ","))]
     [(mfn name inputs body attributes) (gen mfn/gen name inputs body attributes)]
     [(sfn name inputs body attributes) (gen sfn/gen name inputs body attributes)]
+    [(fn name inputs body attributes) (gen fn/gen name inputs body attributes)]
     [(var-assignment var value) (gen var-assignment/gen var value)]
     [(store-set key value) (gen store-set/gen key value)]
     [(store-get ident key) (gen store-get/gen ident key)]

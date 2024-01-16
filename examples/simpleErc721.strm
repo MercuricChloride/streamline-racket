@@ -4,6 +4,9 @@ bayc = ERC721(0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D);
 milady = ERC721(0x5Af0D9827E0c53E4799BB226655A1de152A425a5);
 azuki = ERC721(0xED5AF388653567Af2F388E6224dC7C4b3241C544);
 
+fn doubleNum = [num]
+   |> (num) => num * 2;
+
 mfn miladyTransfers = EVENTS
     |> (events) => events.milady.Transfer;
 
@@ -20,7 +23,7 @@ mfn mapAzukiOwnerChanges = [storeAzukiOwners.deltas]
     |> (deltas) => do{
        foo = uint(foo) + 1;
        {
-        foo: foo
+        foo: doubleNum(foo)
        }
     };
 

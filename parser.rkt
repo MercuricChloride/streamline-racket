@@ -84,6 +84,7 @@
 
 (struct mfn (name inputs body attributes) #:prefab) ; mfn foo = EVENTS...
 (struct sfn (name inputs body attributes) #:prefab) ; sfn foo = EVENTS ...
+(struct fn (name inputs body attributes) #:prefab) ; fn foo = [inputs] ...
 (struct source-def (path) #:prefab) ; import "foo.sol";
 (struct instance-def (name abi-type address) #:prefab) ; bayc = ERC721(0x...);
 
@@ -496,9 +497,25 @@
       [pipeline <- pipeline/p]
       (pure (sfn name inputs pipeline attributes))))
 
+(define (fn/p attributes)
+  (do (token/p 'FN)
+      [modules <- (declared-modules)]
+      [name
+       <-
+       (guard/p ident/p
+                (lambda (name) (not (hash-has-key? modules name)))
+                "This function name already has been defined!")]
+      (declared-modules (let ([ht (hash-copy modules)])
+                          (hash-set! ht name (module-data "FN" name attributes))
+                          ht))
+      (token/p 'ASSIGNMENT)
+      [inputs <- module-inputs/p]
+      [pipeline <- pipeline/p]
+      (pure (fn name inputs pipeline attributes))))
+
 (define module-def/p
   (do (attributes <- (many*/p attribute/p))
-      (mod <- (or/p (mfn/p attributes) (sfn/p attributes)))
+      (mod <- (or/p (fn/p attributes) (mfn/p attributes) (sfn/p attributes)))
       (pure mod)))
 
 (define source-def/p
@@ -537,7 +554,8 @@
     [(yaml-input-data name "MFN" "default") (hash "map" name)]
     [(yaml-input-data name "SFN" "default") (hash "store" name "mode" "get")]
     [(yaml-input-data name "SFN" "deltas") (hash "store" name "mode" "deltas")]
-    [(yaml-input-data name "SOURCE" "default") (hash "source" "sf.ethereum.type.v2.Block")]))
+    [(yaml-input-data name "SOURCE" "default") (hash "source" "sf.ethereum.type.v2.Block")]
+    [(yaml-input-data name "FN" _) null]))
 
 (define (module->yaml mod inputs)
   (let ([output (hash "type" "proto:google.protobuf.Struct")]
@@ -622,6 +640,7 @@
 
          mfn
          sfn
+         fn
          source-def
          instance-def)
 
