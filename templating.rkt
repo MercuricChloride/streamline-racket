@@ -10,7 +10,11 @@
          dali
          yaml
          "./lexer.rkt"
-         "./parser.rkt")
+         "./parser.rkt"
+         "./yaml.rkt"
+         "./macros.rkt"
+         "./utils.rkt"
+         "./module-utils.rkt")
 
 ; The dali template library escapes a bunch of characters, we don't need this.
 ; So we just set the escape-replacements parameter to be effectively nothing. (it checks for an empty list)
@@ -26,36 +30,10 @@
 (define streamline-path
   (string-replace (with-output-to-string (lambda () (system "echo $HOME/.streamline/"))) "\n" ""))
 
-(define (yaml-string name)
-  (expand-string
-   "
-specVersion: v0.1.0
-package:
-  name: {{name}}
-  version: v0.1.0
-
-imports:
-  sql: https://github.com/streamingfast/substreams-sink-sql/releases/download/protodefs-v1.0.2/substreams-sink-sql-protodefs-v1.0.2.spkg
-  database_change: https://github.com/streamingfast/substreams-sink-database-changes/releases/download/v1.2.1/substreams-database-change-v1.2.1.spkg
-
-protobuf:
-  files:
-   - struct.proto
-  importPaths:
-    - ./proto
-
-network: mainnet
-
-binaries:
-  default:
-    type: wasm/rust-v1
-    file: ./target/wasm32-unknown-unknown/release/streamline.wasm
-"
-   (hash "name" name)))
-
 (define (expand str kvs)
   (expand-string str kvs))
 
+;; Recursively generate code
 (define-syntax-rule (gen proc arg ...) (proc (generate-code arg) ...))
 
 ;; A little helper macro that wraps the proc in a parameterize that declares it to generate as though it were a function body rather than top level.
@@ -66,105 +44,84 @@ binaries:
 ;; Data for generating contract source code
 (struct source-data (sol-macro name events))
 
-(define-syntax-rule (source path)
-  (let* ([source-code (port->string (open-input-file path))]
-         [events (regexp-match* #rx"event ([a-zA-Z$_][a-zA-Z0-9$_]*)\\([a-zA-Z$_][a-zA-Z0-9$_]*\\)"
-                                source-code
-                                #:match-select cadr)]
-         [name (regexp-match* #rx"(?:interface|contract) ([a-zA-Z$_][a-zA-Z0-9$_]*)"
-                              source-code
-                              #:match-select cadr)]
-         [sol-macro (expand "
-loose_sol! {
-  {{solidity}}
-}
-" (hash "solidity" source-code))])
-    (contract-instance sol-macro name events)))
-
-(define (get-events/gen event-name abi address)
-  (expand
-   "
-    \"{{event-name}}\"; {{abi}}::{{event-name}}::get_events(&blk, &[&address!(\"{{address}}\")])
-"
-   (hash "event-name" event-name "abi" abi "address" (string-downcase (substring address 2)))))
-
-(define (sources parser-result)
-  (filter (lambda (item) (eq? (first item) 'source)) parser-result))
-
-(define (instances parser-result)
-  (filter (lambda (item) (eq? (first item) 'instance)) parser-result))
+(def-template
+ (get-events/gen event-name abi address)
+ (address (string-downcase (substring address 2)))
+ "
+    \"{{event-name}}\"; {{abi}}::{{event-name}}::get_events(&blk, &[&address!(\"{{address}}\")])")
 
 (define (source-def/gen path)
-  (let* ([source-code (port->string (open-input-file path))]
-         [events (filter (lambda (i) (not (false? i)))
-                         (regexp-match* #rx"event ([a-zA-Z$_][a-zA-Z0-9$_]*)\\("
-                                        source-code
-                                        #:match-select cadr))]
-         [name (regexp-match* #rx"(?:interface|contract) ([a-zA-Z$_][a-zA-Z0-9$_]*)"
-                              source-code
-                              #:match-select cadr)]
-         [replaced-source (string-replace source-code
-                                          "contract"
-                                          "#[derive(Serialize, Deserialize, Debug)]\ncontract"
-                                          #:all? true)]
-         [replaced-source (string-replace replaced-source
-                                          "interface"
-                                          "#[derive(Serialize, Deserialize, Debug)]\ninterface"
-                                          #:all? true)]
-         [replaced-source (string-replace replaced-source
-                                          "struct"
-                                          "#[derive(Serialize, Deserialize, Debug)]\nstruct"
-                                          #:all? true)]
-         [replaced-source (string-replace replaced-source
-                                          "enum"
-                                          "#[derive(Serialize, Deserialize, Debug)]\nenum"
-                                          #:all? true)]
-         [sol-macro (expand "
-sol! {
-  {{solidity}}
-}
-" (hash "solidity" replaced-source))])
-    (source-data sol-macro (first name) (flatten events))))
+
+  ;; Grab the source code
+  (define source-code (port->string (open-input-file path)))
+
+  ;; Grab the name of the source
+  (define source-name
+    (as~> v
+          (regexp-match* #rx"(?:interface|contract) ([a-zA-Z$_][a-zA-Z0-9$_]*)"
+                         source-code
+                         #:match-select cadr)
+          (first v)))
+  ;; Grab the events from the source
+  (define events
+    ;; NOTE I think I can replace this with identity
+    (as~>
+     v
+     (filter (lambda (i) (not (false? i)))
+             (regexp-match* #rx"event ([a-zA-Z$_][a-zA-Z0-9$_]*)\\(" source-code #:match-select cadr))
+     (flatten v)))
+  ;; Generate the sol-macro implementation
+  (define sol-macro (derive-sol-traits source-code))
+
+  ;; Construct the source-data struct
+  (source-data sol-macro source-name events))
 
 (define (attr-vars/map attributes proc)
-  (filter-map (λ (attribute)
-                (match attribute
-                  [(kv-attribute "var" name value) (proc name value)]
-                  [_ false]))
+  (filter-map (match-lambda
+                [(kv-attribute "var" name value) (proc name value)]
+                [_ false])
               attributes))
 
 (define (attr-vars/gen attributes)
-  (string-join
-   (attr-vars/map attributes
-                  (λ (name value)
-                    (format "let mut ~a:std::rc::Rc<LocalVar> = std::rc::Rc::new(LocalVar::from(~a));"
-                            name
-                            (generate-code value))))
-   "\n"))
+  (w-sep "\n"
+         (attr-vars/map
+          attributes
+          (λ (name value)
+            (format "let mut ~a:std::rc::Rc<LocalVar> = std::rc::Rc::new(LocalVar::from(~a));"
+                    name
+                    (generate-code value))))))
 
 (define (module-inputs/gen inputs)
-  (string-join
-   (map (lambda (input)
-          (match input
+  (w-sep ","
+         (minput-map
+          inputs
+          (match-lambda
             [(sfn-delta-edge from) (format "~a: Deltas<DeltaProto<prost_wkt_types::Struct>>" from)]
-            [_ (format "~a: prost_wkt_types::Struct" input)]))
-        inputs)
-   ","))
+            [?
+             string?
+             (format "~a: prost_wkt_types::Struct" ?)]))))
+
+(def-template (format-inputs inputs) (inputs (w-sep "," inputs)) "format_inputs!({{inputs}})")
+
+(def-template
+ (mfn/template name inputs local-vars format-inputs initial-value body)
+ (inputs (module-inputs/gen inputs))
+ "
+  #[substreams::handlers::map]
+  fn {{name}}({{inputs}}) -> Option<prost_wkt_types::Struct> {
+      {{local-vars}}
+      {{format-inputs}}
+      with_map! {output_map,
+        {{initial-value}}
+        {{body}}
+    }
+  }")
 
 (define (mfn/gen name inputs raw-body attributes)
   (define var-names (attr-vars/map attributes (λ (name _) name)))
   (define body
     (parameterize ([local-var-names var-names])
       (generate-code raw-body)))
-
-  (define formatted-inputs
-    (map (lambda (input)
-           (match input
-             [(sfn-delta-edge from) from]
-             [_ input]))
-         inputs))
-
-  (define -inputs (module-inputs/gen inputs))
 
   (define initial-value
     (if (= (length formatted-inputs) 1)
@@ -175,30 +132,7 @@ sol! {
 
   (define local-vars (attr-vars/gen attributes))
 
-  (expand
-   "
-#[substreams::handlers::map]
-fn {{name}}({{inputs}}) -> Option<prost_wkt_types::Struct> {
-    {{local-vars}}
-    {{format-inputs}}
-    with_map! {output_map,
-      {{initial-value}}
-      {{body}}
-   }
-}
-"
-   (hash "name"
-         name
-         "inputs"
-         -inputs
-         "format-inputs"
-         format-inputs
-         "body"
-         body
-         "initial-value"
-         initial-value
-         "local-vars"
-         local-vars)))
+  (mfn/template name inputs local-vars format-inputs initial-value body))
 
 (define (sfn/gen name inputs raw-body attributes)
   (define -inputs (module-inputs/gen inputs))
@@ -444,6 +378,7 @@ map_literal!{
             (cons sol-macro (cons name events)))] ; we are returning this so we can construct a hash table from name and events with the rest of the returned list
          [_ false]))
      parsed-input))
+  (print source-defs)
 
   ; Creates a hash map from an abi instance -> all of the event names
   (define source-hash (make-hash (map (lambda (item) (rest item)) source-defs)))
