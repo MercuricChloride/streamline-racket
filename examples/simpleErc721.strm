@@ -20,10 +20,11 @@ sfn storeAzukiOwners = EVENTS
 
 @var foo = "420"
 mfn mapAzukiOwnerChanges = [storeAzukiOwners.deltas]
-    |> (deltas) => do{
-       foo = uint(foo) + 1;
+    |> map (delta) => do{
+       foo = 123 + foo;
        {
-        foo: doubleNum(foo)
+        foo: doubleNum(@foo),
+        delta: delta
        }
     };
 

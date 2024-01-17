@@ -62,6 +62,7 @@
 (struct kv-attribute (name key value) #:prefab) ; @const foo = bar
 
 (struct map-literal (kvs) #:prefab) ; { ... }
+(struct var-literal (name) #:prefab) ; $foo
 (struct string-literal (str) #:prefab) ; "hi"
 (struct number-literal (num) #:prefab) ; 42
 (struct boolean-literal (val) #:prefab) ; true / false
@@ -141,11 +142,13 @@
 
 (define group/p (do (token/p 'LPAREN) [expr <- (lazy/p expression/p)] (token/p 'RPAREN) (pure expr)))
 (define ident/p (do [ident <- (token/p 'IDENTIFIER)] (pure ident)))
+(define var/p (do (token/p 'AT) (ident <- ident/p) (pure (var-literal ident))))
 
 (define literal/p
   (do [literal
        <-
        (or/p (try/p (lazy/p function-call/p))
+             var/p
              group/p
              true/p
              false/p
@@ -457,7 +460,6 @@
                 "This module name is undefined! Please use a defined module for inputs to a module!")]
       (declared-edges (stream-append edges
                                      (map (lambda (input)
-                                            (println input)
                                             (match input
                                               [(sfn-delta-edge from) (edge-data from name "deltas")]
                                               [_ (edge-data input name "default")]))
@@ -489,7 +491,6 @@
                 "This module name is undefined! Please use a defined module for inputs to a module!")]
       (declared-edges (stream-append edges
                                      (map (lambda (input)
-                                            (println input)
                                             (match input
                                               [(sfn-delta-edge from) (edge-data from name "deltas")]
                                               [_ (edge-data input name "default")]))
@@ -581,7 +582,6 @@
 
 (define (parse-file! tokenized-input)
   (define result (parse-result! (parse-tokens streamline/p tokenized-input)))
-  (print result)
   (match result
     [(list parsed-file modules edges)
      (begin
@@ -630,6 +630,7 @@
          store-get
          function-call
          var-assignment
+         var-literal
 
          tag-attribute
          value-attribute
@@ -643,9 +644,3 @@
          fn
          source-def
          instance-def)
-
-;; (define file-port (open-input-file "examples/simpleErc721.strm"))
-;; (require "lexer.rkt")
-;; (define tokenized (tokenize file-port))
-;; tokenized
-;; (parse-file! tokenized)

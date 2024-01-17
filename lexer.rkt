@@ -11,7 +11,7 @@
  (identifier? (:seq (:or alphabetic (char-set "$_")) (:* (:or alphabetic numeric (char-set "$_")))))
  ;TODO Fix operator precedence
  (operator? (:or "+" "-" "*" "/" "==" "!=" "<" ">" "<=" ">=" "&&" "||" "!" "|>" "="))
- (punct? (:or (char-set "(){}[];:\"'.,#@") "=>"))
+ (punct? (:or (char-set "(){}[];:\"'.,#@$") "=>"))
  ;; literal abbreviations
  (address? (:seq "0x" (:= 40 (:or (:/ #\a #\f) (:/ #\A #\F) numeric))))
  (num? (:+ numeric))
@@ -37,7 +37,8 @@
                              DOT
                              HASH
                              COMMA
-                             AT))
+                             AT
+                             DOLLAR))
 
 (define (string->punct str)
   (match str
@@ -55,7 +56,8 @@
     ["." token-DOT]
     ["," token-COMMA]
     ["#" token-HASH]
-    ["@" token-AT]))
+    ["@" token-AT]
+    ["$" token-DOLLAR]))
 
 (define (string->operator str)
   (match str

@@ -16,6 +16,9 @@
 ; So we just set the escape-replacements parameter to be effectively nothing. (it checks for an empty list)
 (escape-replacements '(("&" . "&")))
 
+;; A PARAM that allows us to keep track of what variables are in scope when generating code. This allows us to modify how to borrow variables in callback functions
+(define local-var-names (make-parameter '()))
+
 ; This is a param that should return true whenever we are generating code in a fn body.
 ; This will just change what we generate slightly
 (define in-fn? (make-parameter #f))
@@ -53,7 +56,8 @@ binaries:
 (define (expand str kvs)
   (expand-string str kvs))
 
-(define-syntax-rule (gen proc args ...) (apply proc (map generate-code (list args ...))))
+(define-syntax-rule (gen proc arg ...) (proc (generate-code arg) ...))
+
 ;; A little helper macro that wraps the proc in a parameterize that declares it to generate as though it were a function body rather than top level.
 (define-syntax-rule (in-fn arg)
   (parameterize ([in-fn? true])
@@ -122,23 +126,37 @@ sol! {
 " (hash "solidity" replaced-source))])
     (source-data sol-macro (first name) (flatten events))))
 
+(define (attr-vars/map attributes proc)
+  (filter-map (λ (attribute)
+                (match attribute
+                  [(kv-attribute "var" name value) (proc name value)]
+                  [_ false]))
+              attributes))
+
 (define (attr-vars/gen attributes)
-  (define vars
-    (filter (λ (attribute)
-              (match attribute
-                [(kv-attribute "var" _ _) true]
-                [_ false]))
-            attributes))
-  (define var-code
-    (map (λ (var)
-           (match var
-             [(kv-attribute "var" k v)
-              (format "let mut ~a:LocalVar = LocalVar::from(~a);" k (generate-code v))]))
-         vars))
+  (string-join
+   (attr-vars/map attributes
+                  (λ (name value)
+                    (format "let mut ~a:std::rc::Rc<LocalVar> = std::rc::Rc::new(LocalVar::from(~a));"
+                            name
+                            (generate-code value))))
+   "\n"))
 
-  (string-join var-code "\n"))
+(define (module-inputs/gen inputs)
+  (string-join
+   (map (lambda (input)
+          (match input
+            [(sfn-delta-edge from) (format "~a: Deltas<DeltaProto<prost_wkt_types::Struct>>" from)]
+            [_ (format "~a: prost_wkt_types::Struct" input)]))
+        inputs)
+   ","))
 
-(define (mfn/gen name inputs body attributes)
+(define (mfn/gen name inputs raw-body attributes)
+  (define var-names (attr-vars/map attributes (λ (name _) name)))
+  (define body
+    (parameterize ([local-var-names var-names])
+      (generate-code raw-body)))
+
   (define formatted-inputs
     (map (lambda (input)
            (match input
@@ -146,14 +164,7 @@ sol! {
              [_ input]))
          inputs))
 
-  (define -inputs
-    (string-join
-     (map (lambda (input)
-            (match input
-              [(sfn-delta-edge from) (format "~a: Deltas<DeltaProto<prost_wkt_types::Struct>>" from)]
-              [_ (format "~a: prost_wkt_types::Struct" input)]))
-          inputs)
-     ","))
+  (define -inputs (module-inputs/gen inputs))
 
   (define initial-value
     (if (= (length formatted-inputs) 1)
@@ -163,6 +174,7 @@ sol! {
   (define format-inputs (format "format_inputs!(~a);" (string-join formatted-inputs ",")))
 
   (define local-vars (attr-vars/gen attributes))
+
   (expand
    "
 #[substreams::handlers::map]
@@ -188,9 +200,12 @@ fn {{name}}({{inputs}}) -> Option<prost_wkt_types::Struct> {
          "local-vars"
          local-vars)))
 
-(define (sfn/gen name inputs body attributes)
-  (define -inputs
-    (string-join (map (lambda (input) (format "~a: prost_wkt_types::Struct" input)) inputs) ","))
+(define (sfn/gen name inputs raw-body attributes)
+  (define -inputs (module-inputs/gen inputs))
+  (define var-names (attr-vars/map attributes (λ (name _) name)))
+  (define body
+    (parameterize ([local-var-names var-names])
+      (generate-code raw-body)))
 
   (define initial-value
     (if (= (length inputs) 1)
@@ -231,8 +246,13 @@ fn {{name}}({{inputs}}, substreams_store_param: {{store-kind}}) {
          "local-vars"
          local-vars)))
 
-(define (fn/gen name inputs body attributes)
+(define (fn/gen name inputs raw-body attributes)
   (define -inputs (string-join (map (lambda (input) (format "~a: LocalVar" input)) inputs) ","))
+
+  (define var-names (attr-vars/map attributes (λ (name _) name)))
+  (define body
+    (parameterize ([local-var-names var-names])
+      (generate-code raw-body)))
 
   (define initial-value
     (if (= (length inputs) 1)
@@ -276,7 +296,7 @@ fn {{name}}({{inputs}}) -> SolidityType {
    "
 let output_map: SolidityType = (|({{args}}): ({{arg-types}})| -> SolidityType { {{exprs}} })(output_map);
 "
-   (hash "args" -args "arg-types" arg-types "exprs" exprs)))
+   (hash "args" -args "arg-types" arg-types "exprs" (generate-code exprs))))
 
 (define (hof/gen hof-kind fn-args exprs)
   (define -args (string-join fn-args ","))
@@ -285,7 +305,7 @@ let output_map: SolidityType = (|({{args}}): ({{arg-types}})| -> SolidityType { 
    "
   let output_map:SolidityType = {{kind}}!(output_map, |({{args}})| -> SolidityType { {{exprs}} });
 "
-   (hash "kind" hof-kind "args" -args "arg-types" arg-types "exprs" exprs)))
+   (hash "kind" hof-kind "args" -args "arg-types" arg-types "exprs" (generate-code exprs))))
 
 (define (map-literal/gen kvs)
   (expand "
@@ -332,10 +352,10 @@ map_literal!{
   (format "{ ~a }" (string-join exprs ";")))
 
 (define (function-call/gen name args)
-  (format "~a(~a)" name (string-join args ",")))
+  (format "~a(~a)" name (string-join (map (λ (arg) (format "~a.into()" arg)) args) ",")))
 
 (define (var-assignment/gen var value)
-  (format "{~a = LocalVar::from(~a); SolidityType::Null}" var value))
+  (format "{std::rc::Rc::get_mut(~a) = LocalVar::from(~a); SolidityType::Null}" var value))
 
 (define (write-string-to-file string filename)
   (with-output-to-file filename (lambda () (pretty-display string)) #:exists 'replace))
@@ -349,7 +369,10 @@ map_literal!{
     [(function-call name args) (function-call/gen name (map generate-code args))]
 
     [(key-value key val) (gen key-value/gen key val)]
-    [(identifier name) (gen symbol->string name)]
+    [(identifier name)
+     (begin
+       (println (local-var-names))
+       (symbol->string name))]
     [(binary-op lh op rh) (gen binary-op/gen lh op rh)]
     [(string-literal value) (format "sol_type!(String, \"~a\")" value)]
     [(number-literal value) (format "sol_type!(Uint, \"~a\")" value)]
@@ -359,18 +382,21 @@ map_literal!{
      (format "SolidityType::Tuple(vec![~a])" (string-join (map generate-code vals) ","))]
     [(list-literal vals)
      (format "SolidityType::List(vec![~a])" (string-join (map generate-code vals) ","))]
-    [(mfn name inputs body attributes) (gen mfn/gen name inputs body attributes)]
-    [(sfn name inputs body attributes) (gen sfn/gen name inputs body attributes)]
-    [(fn name inputs body attributes) (gen fn/gen name inputs body attributes)]
+    [(mfn name inputs body attributes) (mfn/gen name inputs body attributes)]
+    [(sfn name inputs body attributes) (sfn/gen name inputs body attributes)]
+    [(fn name inputs body attributes) (fn/gen name inputs body attributes)]
     [(var-assignment var value) (gen var-assignment/gen var value)]
     [(store-set key value) (gen store-set/gen key value)]
     [(store-get ident key) (gen store-get/gen ident key)]
     [(store-delete prefix) (gen store-delete/gen prefix)]
-    [(lam fn-args exprs) (gen lam/gen fn-args exprs)]
-    [(hof kind (lam args body)) (gen hof/gen kind args body)]
+    [(lam fn-args exprs) (lam/gen fn-args exprs)]
+    [(hof kind (lam args body)) (hof/gen kind args body)]
     [(pipeline functors) (string-join (map generate-code functors) "\n")]
     [(field-access lh rhs) (gen field-access/gen lh rhs)]
-    [(? string?) node]
+    [(? string?)
+     (begin
+       (println (format "Found node ~a, current in scope is: ~a" node (local-var-names)))
+       node)]
     [(? number?) node]
     [(list item ...)
      (string? item)
@@ -391,7 +417,6 @@ map_literal!{
   ; lex the file
   (define tokenized-input (tokenize source-port))
   (println "Tokenized Input")
-  (pretty-display tokenized-input)
 
   ; parse the file
   (define parsed-result (parse-file! tokenized-input))
