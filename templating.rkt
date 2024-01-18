@@ -243,7 +243,7 @@ map_literal!{
 (def-template (do-block/gen exprs) (exprs (w-sep ";" exprs)) "{ {{exprs}} }")
 (def-template
  (function-call/gen name args)
- (args (w-sep "," (map (λ (arg) (template "Into::<SolidityType>::into({{arg}})" arg)) args)))
+ (args (w-sep "," (map (λ (arg) (template "&Into::<SolidityType>::into({{arg}})" arg)) args)))
  "{{name}}({{args}})")
 
 (def-template (var-assignment/gen var value)
@@ -330,7 +330,7 @@ macro_rules! {{name}} {
            ['hof (format "&~a" node)]
            ['assignment (format "&mut ~a" node)]
            ['set (format "~a.replace(cell_value)" node)]
-           ['read (format "*(~a.borrow())" node)])
+           ['read (format "~a.borrow().clone()" node)])
          node)]
     [(? number?) node]
     [(list item ...) (map generate-code node)]
@@ -410,7 +410,7 @@ fn EVENTS(blk: eth::Block) -> Option<prost_wkt_types::Struct> {
             (template
              "
         output_map.insert(\"{{name}}\", map_literal! {
-{{instance-events}}
+{{events}}
                     });"
              name
              events)])
@@ -433,9 +433,9 @@ fn EVENTS(blk: eth::Block) -> Option<prost_wkt_types::Struct> {
   (write-string-to-file generated-code (string-append streamline-path "src/streamline.rs"))
   (println "Wrote output code")
 
-  (println "The compile step is disabled right now :)")
-  ;(pretty-display (with-output-to-string (lambda ()
-  ;(system (format "cd ~a && make build" streamline-path)))))
+  ;;(println "The compile step is disabled right now :)")
+  (pretty-display (with-output-to-string (lambda ()
+                                           (system (format "cd ~a && make build" streamline-path)))))
   (println "Compiled Rust Code"))
 
 (provide generate-streamline-file
