@@ -1,4 +1,4 @@
-#lang racket/base
+#lang racket
 
 (require racket/string
          racket/port
@@ -14,7 +14,8 @@
          "./yaml.rkt"
          "./macros.rkt"
          "./utils.rkt"
-         "./module-utils.rkt")
+         "./module-utils.rkt"
+         (for-syntax syntax/parse))
 
 ; The dali template library escapes a bunch of characters, we don't need this.
 ; So we just set the escape-replacements parameter to be effectively nothing. (it checks for an empty list)
@@ -47,7 +48,11 @@
     expression))
 
 ;; Recursively generate code
-(define-syntax-rule (gen proc arg ...) (proc (generate-code arg) ...))
+(define-syntax (gen stx)
+  (syntax-parse stx
+    #:literals (w-context)
+    [(_ proc:id (~seq (~or arg:id (w-context ctx:expr aarg:id))) ...)
+     #'(proc (~? (w-context ctx (generate-code aarg)) (generate-code arg)) ...)]))
 
 ;; ==========================================
 ;; STRUCTS
@@ -70,7 +75,7 @@
   (w-sep "\n"
          (map (match-lambda
                 [(list name value)
-                 (format "let mut ~a:std::rc::Rc<LocalVar> = std::rc::Rc::new(LocalVar::from(~a));"
+                 (format "let mut ~a:RefCell<LocalVar> = RefCell::new(LocalVar::from(~a));"
                          name
                          (generate-code value))])
               (local-var-names))))
@@ -236,13 +241,13 @@ map_literal!{
               "{substreams_store_param.generic_delete_prefix({{prefix}}); SolidityType::Null}")
 (def-template (store-get/gen ident key) "{{ident}}.generic_get({{key}})")
 (def-template (do-block/gen exprs) (exprs (w-sep ";" exprs)) "{ {{exprs}} }")
-(def-template (function-call/gen name args)
-              (args (w-sep "," (map (λ (arg) (template "{{arg}}.into()" arg)) args)))
-              "{{name}}({{args}})")
-
 (def-template
- (var-assignment/gen var value)
- "{let mut mut_val = std::rc::Rc::get_mut({{var}}); mut_val = Some(&mut LocalVar::from({{value}})); SolidityType::Null}")
+ (function-call/gen name args)
+ (args (w-sep "," (map (λ (arg) (template "Into::<SolidityType>::into({{arg}})" arg)) args)))
+ "{{name}}({{args}})")
+
+(def-template (var-assignment/gen var value)
+              "{ let cell_value = LocalVar::from({{value}}); {{var}}; SolidityType::Null }")
 (def-template (sol-type type value) "sol_type!({{type}}, \"{{value}}\")")
 (def-template (tuple-lit vals) (vals (w-sep "," vals)) "SolidityType::Tuple(vec![{{vals}}])")
 (def-template (list-lit vals) (vals (w-sep "," vals)) "SolidityType::List(vec![{{vals}}])")
@@ -297,7 +302,7 @@ macro_rules! {{name}} {
     [(do-block exprs) (gen do-block/gen exprs)]
     [(map-literal kvs) (gen map-literal/gen kvs)]
     [(function-call name args) (gen function-call/gen name args)]
-    [(key-value key val) (gen key-value/gen key val)]
+    [(key-value key val) (gen key-value/gen (w-context 'global key) (w-context 'read val))]
     [(identifier name) (gen name)]
     [(binary-op lh op rh) (gen binary-op/gen lh op rh)]
     [(string-literal value) (sol-type "String" value)]
@@ -309,7 +314,7 @@ macro_rules! {{name}} {
     [(mfn name inputs body attributes) (w-attributes attributes (gen mfn/gen name inputs body))]
     [(sfn name inputs body attributes) (w-attributes attributes (gen sfn/gen name inputs body))]
     [(fn name inputs body attributes) (w-attributes attributes (gen fn/gen name inputs body))]
-    [(var-assignment var value) (w-context 'assignment (gen var-assignment/gen var value))]
+    [(var-assignment var value) (gen var-assignment/gen (w-context 'set var) (w-context 'read value))]
     [(store-set key value) (gen store-set/gen key value)]
     [(store-get ident key) (gen store-get/gen ident key)]
     [(store-delete prefix) (gen store-delete/gen prefix)]
@@ -323,7 +328,9 @@ macro_rules! {{name}} {
          (match (current-context)
            ['global node]
            ['hof (format "&~a" node)]
-           ['assignment (format "&mut ~a" node)])
+           ['assignment (format "&mut ~a" node)]
+           ['set (format "~a.replace(cell_value)" node)]
+           ['read (format "*(~a.borrow())" node)])
          node)]
     [(? number?) node]
     [(list item ...) (map generate-code node)]
@@ -426,8 +433,9 @@ fn EVENTS(blk: eth::Block) -> Option<prost_wkt_types::Struct> {
   (write-string-to-file generated-code (string-append streamline-path "src/streamline.rs"))
   (println "Wrote output code")
 
-  (pretty-display (with-output-to-string (lambda ()
-                                           (system (format "cd ~a && make build" streamline-path)))))
+  (println "The compile step is disabled right now :)")
+  ;(pretty-display (with-output-to-string (lambda ()
+  ;(system (format "cd ~a && make build" streamline-path)))))
   (println "Compiled Rust Code"))
 
 (provide generate-streamline-file
