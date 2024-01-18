@@ -23,7 +23,7 @@ mfn mapAzukiOwnerChanges = [storeAzukiOwners.deltas]
     |> map (delta) => do{
        foo = 123 + foo;
        {
-        foo: doubleNum(@foo),
+        foo: doubleNum(foo),
         delta: delta
        }
     };

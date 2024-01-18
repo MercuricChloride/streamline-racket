@@ -9,6 +9,7 @@
          ~>>
          as~>
          w-sep)
+;; w-local-vars
 
 ;; Converts a series of idents into a hashmap from (string of the ident) -> ident value
 ;; We use this for templating
@@ -27,12 +28,14 @@
     [(_ (name param ...) str:expr)
      #'(define (name (~@ param) ...)
          (template str (~@ param) ...))]
-    [(_ (name param ...) (namev:id remap:expr ...) str:expr)
+    [(_ (name param ...) ((~seq namev:id remap:expr) ...) str:expr)
      #'(define (name (~@ param) ...)
-         (let ([~? (namev remap)] ...) (template str (~@ param) ...)))]))
+         (let* ([~? (namev remap)] ...) (template str (~@ param) ... (~@ namev) ...)))]))
 
 ;; Thread Replace
 ;; Allows us to easily define replacements
+;; Note that our particular use of it adds the replacement at the end of the replacement,
+;; because we are using this to update text, not replace it
 (define-syntax (thread-replace stx)
   (syntax-parse stx
     [(_ str:expr (~seq find:expr replace:expr) ...)
@@ -40,11 +43,13 @@
               [output (string-replace output find (format "~a\n~a" replace find) #:all? true)] ...)
          output)]))
 
+;; clojure style thread-last macros
 (define-syntax (~>> stx)
   (syntax-parse stx
     [(_ value:expr (proc:expr callback:expr) ...)
      #'(let* ([val value] [~@ (val (proc callback val))] ...) val)]))
 
+;; clojure style threader macros
 (define-syntax (as~> stx)
   (syntax-parse stx
     [(_ ident:id initial-value:expr expression:expr ...)
@@ -54,11 +59,8 @@
 ;; Will take the last expression given and string join it with the seperator
 (define-syntax (w-sep stx)
   (syntax-parse stx
-    [(_ sep:expr expression:expr ...)
+    [(_ sep:expr expression:expr ...+)
      #'(string-join (begin
                       expression ...)
-                    sep)]))
-
-;;(~>> '(1 2 3 4) (map (λ (num) (* num 2))) (map (λ (num) (* num 2))) (filter (λ (num) (< 10 num))))
-
-;;(as~> t '(1 2 3 4) (map (λ (num) (* num 2)) t) (format "Hello from the format-string! ~a" t))
+                    sep)]
+    [(_ sep:expr) #'""]))
