@@ -21,6 +21,8 @@
 ; So we just set the escape-replacements parameter to be effectively nothing. (it checks for an empty list)
 (escape-replacements '(("&" . "&")))
 
+(define test-parse-result (make-parameter '()))
+
 ;; ==========================================
 ;; PARAMETERS
 ;; ==========================================
@@ -208,13 +210,13 @@ fn {{name}}({{module-inputs}}) -> SolidityType {
 (def-template
  (lam/gen fn-args exprs)
  (args (w-sep "," fn-args) arg-types (fmt-args fn-args))
- "let output_map: SolidityType = (|({{args}}): ({{arg-types}})| -> SolidityType { {{exprs}} })(output_map);")
+ "let output_map = (|({{args}}): ({{arg-types}})| -> SolidityType { {{exprs}} })(output_map);")
 
 (def-template
  (hof/gen kind fn-args exprs)
  (args (w-sep "," fn-args) types (w-sep "," (map (λ (_) "SolidityType") fn-args)))
  "
-  let output_map:SolidityType = {{kind}}!(output_map, |({{args}})| -> SolidityType { {{exprs}} });
+  let output_map = {{kind}}!(output_map, |({{args}})| -> SolidityType { {{exprs}} });
 ")
 
 (def-template (map-literal/gen kvs) (kvs (w-sep "," kvs)) "
@@ -224,7 +226,8 @@ map_literal!{
 ")
 
 (def-template (key-value/gen key val) " \"{{key}}\"; {{val}}")
-(def-template (binary-op/gen lh op rh) "SolidityType::from(({{lh}} {{op}} {{rh}}))")
+(def-template (binary-op/gen lh op rh)
+              "SolidityType::from(( SolidityType::from({{lh}}) {{op}} SolidityType::from({{rh}})))")
 (def-template (field-access/gen lh rhs)
               (rhs (map (match-lambda
                           [(number-literal val) (format "\"~a\"" val)]
@@ -318,7 +321,7 @@ macro_rules! {{name}} {
     [(store-set key value) (gen store-set/gen key value)]
     [(store-get ident key) (gen store-get/gen ident key)]
     [(store-delete prefix) (gen store-delete/gen prefix)]
-    [(lam fn-args exprs) (gen lam/gen fn-args exprs)]
+    [(lam fn-args exprs) (w-context 'read (gen lam/gen fn-args exprs))]
     [(hof kind (lam args body)) (w-context 'hof (gen hof/gen kind args body))]
     ;; TODO I should probably just remove this type
     [(pipeline functors) (w-sep "\n" (map generate-code functors))]
@@ -356,7 +359,8 @@ macro_rules! {{name}} {
   (define parsed-result (parse-file! tokenized-input))
   (define nodes (hash-ref parsed-result "nodes"))
   (generate-yaml streamline-name nodes)
-  (define parsed-input (hash-ref parsed-result "parsed-file"))
+  (define parsed-input (syntax->datum (hash-ref parsed-result "parsed-file")))
+  (test-parse-result (hash-ref parsed-result "parsed-file"))
   (println "Parsed Input")
 
   ; gather the instances

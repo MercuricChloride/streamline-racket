@@ -34,8 +34,8 @@
 (define (output-map-init inputs)
   (let ([inputs (minput-map inputs minput->name)])
     (if (= (length inputs) 1)
-        (format "let output_map = ~a;" (first inputs))
-        (format "let output_map = (~a);" (w-sep "," inputs)))))
+        (format "let mut output_map = ~a;" (first inputs))
+        (format "let mut output_map = (~a);" (w-sep "," inputs)))))
 
 (define (get-store-type attributes)
   (if (member "immutable" attributes)

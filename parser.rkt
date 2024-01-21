@@ -5,11 +5,13 @@
          racket/bool
          racket/stream
          racket/set
+         racket/pretty
          megaparsack
          megaparsack/parser-tools/lex
          data/monad
          data/functor
-         data/applicative)
+         data/applicative
+         "lexer.rkt")
 
 (struct module-data (kind name attributes) #:prefab)
 (struct edge-data (from to mode) #:prefab)
@@ -51,11 +53,11 @@
 (define mfn-kv-attributes (set-subtract kv-attributes '()))
 
 ;; STRUCTS
-(struct primitive-value (value) #:prefab) ; IE Boolean etc
+;;(struct primitive-value (value) #:prefab) ; IE Boolean etc
 (struct identifier (name) #:prefab) ; foo
-(struct type (name) #:prefab) ; foo
-(struct typed-field (name type) #:prefab) ; id: address
-(struct rpc-call (instance-name fn-name args) #:prefab) ; ERC721.#ownerOf(id: address)#
+;(struct type (name) #:prefab) ; foo
+;(struct typed-field (name type) #:prefab) ; id: address
+(struct rpc-call (instance-name fn-name args) #:prefab) ; #bayc.ownerOf(id: address)#
 
 (struct tag-attribute (name) #:prefab) ; @immutable
 (struct value-attribute (name value) #:prefab) ; @startBlock 12345
@@ -141,7 +143,7 @@
       (pure (do-block exprs))))
 
 (define group/p (do (token/p 'LPAREN) [expr <- (lazy/p expression/p)] (token/p 'RPAREN) (pure expr)))
-(define ident/p (do [ident <- (token/p 'IDENTIFIER)] (pure ident)))
+(define ident/p (do [ident <- (syntax/p (token/p 'IDENTIFIER))] (pure ident)))
 (define var/p (do (token/p 'AT) (ident <- ident/p) (pure (var-literal ident))))
 
 (define literal/p
@@ -277,22 +279,25 @@
   (do
    (modules <- (declared-modules))
    (input <- ident/p)
+   (datum-input <- (pure (syntax->datum input)))
    (token/p 'DOT)
    (mode
     <-
     (guard/p
      ident/p
      (lambda (mode)
-       (match (hash-ref modules input)
-         [(module-data "SFN" _ _) (if (member mode sfn-access-types) true false)]
-         [_ false]))
+       (let* ([mode (syntax->datum mode)])
+         (match (hash-ref modules datum-input)
+           [(module-data "SFN" _ _) (if (member mode sfn-access-types) true false)]
+           [_ false])))
      #f
      (lambda (mode)
-       (let ([module-kind (module-data-kind (hash-ref modules input))])
+       (let ([module-kind (module-data-kind (hash-ref modules datum-input))]
+             [input-mode (syntax->datum mode)])
          (cond
            [(not (equal? module-kind "SFN"))
             "Invalid module type for! Please use an SFN if using <MODULE>.deltas or <MODULE>.get!"]
-           [(not (member mode sfn-access-types))
+           [(not (member input-mode sfn-access-types))
             "Invalid special access kind! Valid field access on an SFN is `<MODULE>.deltas` or `<MODULE>.get`"]
            [else
             "This should never show up! If it does, go reach out to @blind_nabler and tell him his code is broken! Sorry!"])))))
@@ -392,7 +397,7 @@
 (define tag-attribute/p
   (do (tag <-
            (guard/p ident/p
-                    (λ (ident) (member ident tag-attributes))
+                    (λ (ident) (member (syntax->datum ident) tag-attributes))
                     #f
                     (λ (ident)
                       (format "Invalid tag attribute: ~a, use one of the following! ~a"
@@ -403,7 +408,7 @@
 (define value-attribute/p
   (do (name <-
             (guard/p ident/p
-                     (λ (ident) (member ident value-attributes))
+                     (λ (ident) (member (syntax->datum ident) value-attributes))
                      #f
                      (λ (ident)
                        (format "Invalid value attribute: ~a, use one of the following! ~a"
@@ -415,7 +420,7 @@
 (define kv-attribute/p
   (do (name <-
             (guard/p ident/p
-                     (λ (ident) (member ident kv-attributes))
+                     (λ (ident) (member (syntax->datum ident) kv-attributes))
                      #f
                      (λ (ident)
                        (format "Invalid key value attribute: ~a, use one of the following! ~a"
@@ -445,8 +450,10 @@
        (guard/p module-name/p
                 (λ (name) (not (hash-has-key? modules name)))
                 "This module name already has been defined!")]
+      [datum-name <- (pure (syntax->datum name))]
+      [datum-attributes <- (pure (syntax->datum attributes))]
       (declared-modules (let ([ht (hash-copy modules)])
-                          (hash-set! ht name (module-data "MFN" name '()))
+                          (hash-set! ht datum-name (module-data "MFN" datum-name '()))
                           ht))
       (token/p 'ASSIGNMENT)
       [inputs
@@ -454,18 +461,21 @@
        (guard/p module-inputs/p
                 (lambda (inputs)
                   (for/and ([input inputs])
-                    (match input
-                      [(sfn-delta-edge from) (hash-has-key? modules from)]
-                      [_ (hash-has-key? modules input)])))
+                    (let* ([input (syntax->datum input)])
+                      (match input
+                        [(sfn-delta-edge from) (hash-has-key? modules from)]
+                        [_ (hash-has-key? modules input)]))))
                 "This module name is undefined! Please use a defined module for inputs to a module!")]
-      (declared-edges (stream-append edges
-                                     (map (lambda (input)
-                                            (match input
-                                              [(sfn-delta-edge from) (edge-data from name "deltas")]
-                                              [_ (edge-data input name "default")]))
-                                          inputs)))
+      (declared-edges
+       (stream-append edges
+                      (map (lambda (input)
+                             (match input
+                               [(sfn-delta-edge from)
+                                (edge-data (syntax->datum from) (syntax->datum name) "deltas")]
+                               [_ (edge-data (syntax->datum input) (syntax->datum name) "default")]))
+                           inputs)))
       [pipeline <- pipeline/p]
-      (pure (mfn name inputs pipeline attributes))))
+      (pure (mfn name inputs pipeline datum-attributes))))
 
 (define (sfn/p attributes)
   (do (token/p 'SFN)
@@ -476,8 +486,10 @@
        (guard/p ident/p
                 (lambda (name) (not (hash-has-key? modules name)))
                 "This module name already has been defined!")]
+      [datum-name <- (pure (syntax->datum name))]
+      [datum-attributes <- (pure (syntax->datum attributes))]
       (declared-modules (let ([ht (hash-copy modules)])
-                          (hash-set! ht name (module-data "SFN" name attributes))
+                          (hash-set! ht datum-name (module-data "SFN" datum-name datum-attributes))
                           ht))
       (token/p 'ASSIGNMENT)
       [inputs
@@ -485,18 +497,21 @@
        (guard/p module-inputs/p
                 (lambda (inputs)
                   (for/and ([input inputs])
-                    (match input
-                      [(sfn-delta-edge from) (hash-has-key? modules from)]
-                      [_ (hash-has-key? modules input)])))
+                    (let* ([input (syntax->datum input)])
+                      (match input
+                        [(sfn-delta-edge from) (hash-has-key? modules from)]
+                        [_ (hash-has-key? modules input)]))))
                 "This module name is undefined! Please use a defined module for inputs to a module!")]
-      (declared-edges (stream-append edges
-                                     (map (lambda (input)
-                                            (match input
-                                              [(sfn-delta-edge from) (edge-data from name "deltas")]
-                                              [_ (edge-data input name "default")]))
-                                          inputs)))
+      (declared-edges
+       (stream-append edges
+                      (map (lambda (input)
+                             (match input
+                               [(sfn-delta-edge from)
+                                (edge-data (syntax->datum from) (syntax->datum name) "deltas")]
+                               [_ (edge-data (syntax->datum input) datum-name "default")]))
+                           inputs)))
       [pipeline <- pipeline/p]
-      (pure (sfn name inputs pipeline attributes))))
+      (pure (sfn name inputs pipeline datum-attributes))))
 
 (define (fn/p attributes)
   (do (token/p 'FN)
@@ -506,34 +521,39 @@
        (guard/p ident/p
                 (lambda (name) (not (hash-has-key? modules name)))
                 "This function name already has been defined!")]
+      [datum-name <- (pure (syntax->datum name))]
+      [datum-attributes <- (pure (syntax->datum attributes))]
       (declared-modules (let ([ht (hash-copy modules)])
-                          (hash-set! ht name (module-data "FN" name attributes))
+                          (hash-set! ht datum-name (module-data "FN" datum-name datum-attributes))
                           ht))
       (token/p 'ASSIGNMENT)
       [inputs <- module-inputs/p]
       [pipeline <- pipeline/p]
-      (pure (fn name inputs pipeline attributes))))
+      (pure (fn name inputs pipeline datum-attributes))))
 
 (define module-def/p
-  (do (attributes <- (many*/p attribute/p))
-      (mod <- (or/p (fn/p attributes) (mfn/p attributes) (sfn/p attributes)))
+  (do (attributes <- (syntax/p (many*/p attribute/p)))
+      (mod <- (syntax/p (or/p (fn/p attributes) (mfn/p attributes) (sfn/p attributes))))
       (pure mod)))
 
 (define source-def/p
-  (do (token/p 'SOURCE) (path <- (token/p 'STRING)) (token/p 'SEMI) (pure (source-def path))))
+  (do (token/p 'SOURCE)
+      (path <- (syntax/p (token/p 'STRING)))
+      (token/p 'SEMI)
+      (pure (source-def path))))
 
 (define instance-def/p
-  (do (name <- ident/p)
+  (do (name <- (syntax/p ident/p))
       (token/p 'ASSIGNMENT)
-      (abi-type <- ident/p)
+      (abi-type <- (syntax/p ident/p))
       (token/p 'LPAREN)
-      (address <- (token/p 'ADDRESS))
+      (address <- (syntax/p (token/p 'ADDRESS)))
       (token/p 'RPAREN)
       (token/p 'SEMI)
       (pure (instance-def name abi-type address))))
 
 (define streamline/p
-  (do [cells <- (many/p (or/p module-def/p source-def/p instance-def/p))]
+  (do [cells <- (syntax/p (many/p (or/p module-def/p source-def/p instance-def/p)))]
       [modules <- (declared-modules)]
       [edges <- (declared-edges)]
       (pure (list cells modules edges))))
@@ -604,11 +624,16 @@
                      (hash-values modules)))
        (hash "parsed-file" parsed-file "nodes" (stream->list nodes)))]))
 
-(provide parse-file!
-         primitive-value
+(define (parse-streamline! input-port)
+  (define tokenized-input (tokenize input-port))
+  (hash-ref (parse-file! tokenized-input) "parsed-file"))
+
+(provide parse-streamline!
+         parse-file!
+         ;;primitive-value
          identifier
-         type
-         typed-field
+         ;type
+         ;typed-field
          rpc-call
 
          do-block
