@@ -11,7 +11,7 @@
          data/monad
          data/functor
          data/applicative
-         "lexer.rkt")
+         streamline/lang/lexer)
 
 (struct module-data (kind name attributes) #:prefab)
 (struct edge-data (from to mode) #:prefab)

@@ -9,12 +9,12 @@
          racket/pretty
          dali
          yaml
-         "./lexer.rkt"
-         "./parser.rkt"
-         "./yaml.rkt"
-         "./macros.rkt"
-         "./utils.rkt"
-         "./module-utils.rkt"
+         streamline/lang/lexer
+         streamline/lang/parser
+         streamline/utils/yaml
+         streamline/utils/macros
+         streamline/utils/utils
+         streamline/utils/module-utils
          (for-syntax syntax/parse))
 
 ; The dali template library escapes a bunch of characters, we don't need this.

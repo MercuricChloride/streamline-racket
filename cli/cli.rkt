@@ -4,7 +4,7 @@
          racket/pretty
          racket/cmdline
          racket/match
-         "./templating.rkt")
+         streamline/templating)
 
 (define puke
   #<<EOF

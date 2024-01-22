@@ -1,7 +1,7 @@
 #lang racket
 
-(require "./macros.rkt"
-         "./parser.rkt")
+(require streamline/utils/macros
+         streamline/lang/parser)
 
 (provide minput->name
          minput-w-type
