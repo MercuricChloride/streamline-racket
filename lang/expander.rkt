@@ -20,10 +20,10 @@
     [(_ . #s(mfn name:expr (input:expr ...) body attributes))
      #:with sname (r:string->symbol (r:syntax->datum #'name))
      #:with inputs #'()
-     #'(r:define (sname) 42)]
-    [(_ . v)
-     #'(begin
-         (#%datum v))]))
+     ;; NOTE The use of syntax-local-introduce here allows us to define
+     ;; our functions at the top level
+     (syntax-local-introduce #'(r:define (sname) 42))]
+    [(_ . v) #'(#%datum v)]))
 
 (define (streamline:read-syntax path input)
   (define ast (parser:parse-streamline! input))
@@ -34,14 +34,28 @@
 
 (define-syntax (@%app stx)
   (syntax-parse stx
-    [(_ import-list) #'(import-list)]))
+    #:datum-literals (import-list)
+    [(_ import-list) #'(import-list)]
+    [(_ any ...) #'(#%app any ...)]))
 
-(provide (rename-out (streamline-datum #%datum) (@%module-begin #%module-begin) (@%app #%app))
+(define-syntax (@%top-interaction stx)
+  (syntax-parse stx
+    #:datum-literals (sexp)
+    [(_ sexp form:expr) #'form]
+    [(_ sexp form:id) #'(@%top form)]))
+
+(provide (rename-out (streamline-datum #%datum)
+                     (@%module-begin #%module-begin)
+                     (@%app #%app)
+                     (@%top-interaction #%top-interaction))
+         #%provide
          #%top
-         #%top-interaction
+         define
+         submod
          streamline:read-syntax
          streamline:read
          import-list
+         require
          instance-list)
 
 ;;(streamline:read-syntax "asdf" (open-input-file "../examples/simpleErc721.strm"))
