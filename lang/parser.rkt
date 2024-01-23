@@ -5,7 +5,6 @@
          racket/bool
          racket/stream
          racket/set
-         racket/pretty
          megaparsack
          megaparsack/parser-tools/lex
          data/monad
