@@ -104,7 +104,7 @@
                  [operator? (string->operator lexeme)]
                  ;; literals
                  [address? (token-ADDRESS lexeme)]
-                 [num? (token-NUMBER lexeme)]
+                 [num? (token-NUMBER (string->number lexeme))]
                  [str? (token-STRING (string->string-token lexeme))]
                  ;; punctuation
                  [punct? ((string->punct lexeme))]))

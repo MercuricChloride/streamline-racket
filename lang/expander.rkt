@@ -29,8 +29,7 @@
     ;;                        (syntax->list #'node.args*))
     ;;  #:with body #'node.body*
     ;;  #'(lambda (arg ...) body)]
-    ;; [(_ . node:number) #'node]
-    [(_ . v) #'(#%datum v)]))
+    [(_ . v) #'(#%datum . v)]))
 
 (define (streamline:read-syntax path input)
   (define ast (parser:parse-streamline! input))

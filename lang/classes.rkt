@@ -55,7 +55,6 @@
     #:with body* #'body
     #:attr code* #'(lambda (arg* ...) body.code*)))
 
-
 (define-syntax-class (expression)
   #:attributes (code*)
   (pattern node:primitive-type
@@ -64,7 +63,7 @@
 (define-syntax-class (primitive-type)
   #:attributes (value*)
   (pattern #s(number-literal val)
-    #:with value* #'(string->number (car val)))
+    #:with value* #'val)
   (pattern #s(string-literal val)
     #:with value* #'val)
   (pattern #s(boolean-literal val:expr)
