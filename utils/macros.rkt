@@ -43,11 +43,26 @@
               [output (string-replace output find (format "~a\n~a" replace find) #:all? true)] ...)
          output)]))
 
+(begin-for-syntax
+  (define-syntax-class (callback)
+    #:attributes (input* procedure*)
+    (pattern (value:expr proc:expr callback:expr)
+      #:with procedure* #'(proc callback value)
+      #:with input* #'value)))
+
 ;; clojure style thread-last macros
 (define-syntax (~>> stx)
   (syntax-parse stx
-    [(_ value:expr (proc:expr callback:expr) ...)
-     #'(let* ([val value] [~@ (val (proc callback val))] ...) val)]))
+    #:literals (lambda)
+    [(_ value:expr (~or (lambda (arg:id ...) body) (hof-proc:expr hof-callback:expr)) ...)
+     #'(let* ([val value]
+              [~?
+               (~@ (val ((lambda (arg ...) body) val)) ...)
+               (~@ (val (hof-proc hof-callback val)) ...)])
+         val)]))
+
+(~>> 42 (lambda (arg) (* 2 arg)))
+(~>> '(1 2 3) (map (lambda (num) (* 2 num))))
 
 ;; clojure style threader macros
 (define-syntax (as~> stx)

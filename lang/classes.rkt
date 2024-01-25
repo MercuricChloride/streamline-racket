@@ -3,7 +3,12 @@
 (require (for-template "./globals.rkt" racket/base)
          syntax/parse)
 
-(provide source-def instance-def function-like)
+(provide source-def
+         instance-def
+         function-like
+         primitive-type
+         pipeline
+         lam)
 
 (define-syntax-rule (syntax->symbol item) #'(string->symbol (syntax->datum item)))
 
@@ -25,13 +30,38 @@
   #:attributes (name* args* body*)
   (pattern #s(mfn name:expr (input ...) body attributes)
     #:with name* #'name
-    #:with body* 42
+    #:with body* #'body
     #:with args* #'(input ...))
   (pattern #s(sfn name:expr (input ...) body attributes)
     #:with name* #'name
-    #:with body* 42
+    #:with body* #'body
     #:with args* #'(input ...))
   (pattern #s(fn name:expr (input ...) body attributes)
     #:with name* #'name
-    #:with body* 42
+    #:with body* #'body
     #:with args* #'(input ...)))
+
+(define-syntax-class (lam)
+  #:attributes (args* body*)
+  (pattern #s(lam args body)
+    #:with args* #'args
+    #:with body* #'body))
+
+(define-syntax-class (pipeline)
+  #:attributes (chain*)
+  (pattern #s(pipeline chain)
+    #:with chain* #'chain))
+
+(define-syntax-class (primitive-type)
+  #:attributes (value*)
+  (pattern #s(number-literal val:expr)
+    #:with value* #'val)
+  (pattern #s(string-literal val:expr)
+    #:with value* #'val)
+  (pattern #s(boolean-literal val:expr)
+    #:with value* #'val)
+  ;; TODO Maybe add a sequence type?
+  (pattern #s(list-literal val:expr)
+    #:with value* #'val)
+  (pattern #s(tuple-literal val:expr)
+    #:with value* #'val))

@@ -2,6 +2,7 @@
 
 (require (prefix-in parser: streamline/lang/parser)
          "./globals.rkt"
+         streamline/utils/macros
          (for-syntax "./classes.rkt" syntax/parse syntax/strip-context))
 
 (define-syntax-rule (@%module-begin node ...) (#%module-begin node ...))
@@ -17,8 +18,17 @@
      #:with name (string->symbol (syntax->datum #'node.name*))
      #:with (args ...) (map (lambda (arg) (string->symbol (syntax->datum arg)))
                             (syntax->list #'node.args*))
+     #:with body #'node.body*
      (syntax-local-introduce #'(define (name (~@ args ...))
-                                 42))]
+                                 (define input (list (~@ args ...)))
+                                 (~>> input (~@ body))))]
+    [(_ . node:primitive-type) #'node.value*]
+    [(_ . node:pipeline) #'node.chain*]
+    [(_ . node:lam)
+     #:with (arg ...) (map (lambda (arg) (string->symbol (syntax->datum arg)))
+                           (syntax->list #'node.args*))
+     #:with body #'node.body*
+     #'(lambda (arg ...) body)]
     [(_ . v) #'(#%datum v)]))
 
 (define (streamline:read-syntax path input)
@@ -44,14 +54,12 @@
                      (@%module-begin #%module-begin)
                      (@%app #%app)
                      (@%top-interaction #%top-interaction)
-                     ;(@%top #%top)
-                     )
-         #%top
-         ;#%top-interaction
+                     (@%top #%top))
          streamline:read-syntax
          streamline:read
          import-list
          instance-list
+         ~>>
          define
          begin-for-syntax)
 ;;(provide (for-syntax import-list instance-list))
