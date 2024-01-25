@@ -35,7 +35,7 @@
   #:attributes (name* args* body*)
   (pattern #s(mfn name:string (input:string ...) body:pipeline _)
     #:with name* #'name
-    #:with body* (first (syntax-e #'body.chain*))
+    #:with body* (syntax-e #'body.chain*)
     #:with args* #'(input ...))
   (pattern #s(sfn name:string (input:string ...) body:pipeline _)
     #:with name* #'name
@@ -58,7 +58,17 @@
 (define-syntax-class (expression)
   #:attributes (code*)
   (pattern node:primitive-type
-      #:with code* #'node.value*))
+      #:with code* #'node.value*)
+  (pattern #s(binary-op lh op rh)
+      #:with op* (match (syntax-e #'op)
+                   ["+" #'+]
+                   ["-" #'-]
+                   ["*" #'*]
+                   ["/" #'/]
+                   ["==" #'eq]
+                   ["<" #'<]
+                   [">" #'>])
+      #:with code* #'(op* lh rh)))
 
 (define-syntax-class (primitive-type)
   #:attributes (value*)

@@ -18,10 +18,10 @@
      #:with name (string->symbol (syntax->datum #'node.name*))
      #:with (args ...) (map (lambda (arg) (string->symbol (syntax->datum arg)))
                             (syntax->list #'node.args*))
-     #:with body #'node.body*
+     #:with (functor ...) #'node.body*
      (syntax-local-introduce #'(define (name (~@ args ...))
                                  (define input (list (~@ args ...)))
-                                 (~>> input body)))]
+                                 (~>> input (~@ functor ...))))]
     [(_ . node:primitive-type) #'node.value*]
     ;; [(_ . node:pipeline) #'node.chain*]
     ;; [(_ . node:lam)
@@ -55,6 +55,7 @@
                      (@%app #%app)
                      (@%top-interaction #%top-interaction)
                      (@%top #%top))
+         (except-out (all-from-out racket) #%datum #%module-begin #%app #%top-interaction #%top)
          streamline:read-syntax
          streamline:read
          import-list
