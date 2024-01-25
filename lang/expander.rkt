@@ -10,7 +10,7 @@
 (define-syntax (streamline-datum stx)
   (syntax-parse stx
     ;; Whenever a source def is declared, we add it to the import-list global var
-    [(_ . node:source-def) #'(import-list (cons node.value (import-list)))]
+    [(_ . node:source-def) #'node.code]
     ;; Whenever a constant instance is declared, we add it to the instance-list global var
     [(_ . node:instance-def) #'(instance-list (cons node.value (instance-list)))]
     ;; Whenever an mfn is declared, we will define a new top level function
@@ -21,14 +21,15 @@
      #:with body #'node.body*
      (syntax-local-introduce #'(define (name (~@ args ...))
                                  (define input (list (~@ args ...)))
-                                 (~>> input (~@ body))))]
+                                 (~>> input body)))]
     [(_ . node:primitive-type) #'node.value*]
-    [(_ . node:pipeline) #'node.chain*]
-    [(_ . node:lam)
-     #:with (arg ...) (map (lambda (arg) (string->symbol (syntax->datum arg)))
-                           (syntax->list #'node.args*))
-     #:with body #'node.body*
-     #'(lambda (arg ...) body)]
+    ;; [(_ . node:pipeline) #'node.chain*]
+    ;; [(_ . node:lam)
+    ;;  #:with (arg ...) (map (lambda (arg) (string->symbol (syntax->datum arg)))
+    ;;                        (syntax->list #'node.args*))
+    ;;  #:with body #'node.body*
+    ;;  #'(lambda (arg ...) body)]
+    ;; [(_ . node:number) #'node]
     [(_ . v) #'(#%datum v)]))
 
 (define (streamline:read-syntax path input)
