@@ -1,28 +1,24 @@
 #lang racket
 
 (require (prefix-in parser: streamline/lang/parser)
-         (prefix-in r: racket)
-         ;; We need to import the syntax-classes, from another file
-         ;; at compile time, but the syntax classes are defined at run time
-         ;; Or I guess we can also just defined the syntax-classes at phase 1
-         ;; and import at runtime ie phase 0?
-         "./classes.rkt"
          "./globals.rkt"
-         (for-syntax syntax/parse "./globals.rkt"))
+         (for-syntax "./classes.rkt" syntax/parse syntax/strip-context))
 
-(provide (for-syntax import-list instance-list))
-
-(define-syntax-rule (@%module-begin node ...) (r:#%module-begin node ...))
+(define-syntax-rule (@%module-begin node ...) (#%module-begin node ...))
 
 (define-syntax (streamline-datum stx)
   (syntax-parse stx
     ;; Whenever a source def is declared, we add it to the import-list global var
-    [(_ . node:source-def) #'(import-list (r:cons node.value (import-list)))]
+    [(_ . node:source-def) #'(import-list (cons node.value (import-list)))]
     ;; Whenever a constant instance is declared, we add it to the instance-list global var
-    [(_ . node:instance-def) #'(instance-list (r:cons node.value (instance-list)))]
+    [(_ . node:instance-def) #'(instance-list (cons node.value (instance-list)))]
     ;; Whenever an mfn is declared, we will define a new top level function
-    [(_ . node:mfn-def) (syntax-local-introduce #'(r:define (node.name*) node.body*))]
-    [(_ . node:fn-def) (syntax-local-introduce #'(r:define (node.name*) node.body*))]
+    [(_ . node:function-like)
+     #:with name (string->symbol (syntax->datum #'node.name*))
+     #:with (args ...) (map (lambda (arg) (string->symbol (syntax->datum arg)))
+                            (syntax->list #'node.args*))
+     (syntax-local-introduce #'(define (name (~@ args ...))
+                                 42))]
     [(_ . v) #'(#%datum v)]))
 
 (define (streamline:read-syntax path input)
@@ -34,27 +30,30 @@
 
 (define-syntax (@%app stx)
   (syntax-parse stx
-    #:datum-literals (import-list)
-    [(_ import-list) #'(import-list)]
     [(_ any ...) #'(#%app any ...)]))
 
 (define-syntax (@%top-interaction stx)
   (syntax-parse stx
     #:datum-literals (sexp)
     [(_ sexp form:expr) #'form]
-    [(_ sexp form:id) #'(@%top form)]))
+    [(_ sexp form:id) #'(#%top form)]))
+
+(define-syntax-rule (@%top . id) (#%top . id))
 
 (provide (rename-out (streamline-datum #%datum)
                      (@%module-begin #%module-begin)
                      (@%app #%app)
-                     (@%top-interaction #%top-interaction))
-         #%provide
+                     (@%top-interaction #%top-interaction)
+                     ;(@%top #%top)
+                     )
          #%top
-         define
+         ;#%top-interaction
          streamline:read-syntax
          streamline:read
          import-list
          instance-list
-         require)
+         define
+         begin-for-syntax)
+;;(provide (for-syntax import-list instance-list))
 
 ;;(streamline:read-syntax "asdf" (open-input-file "../examples/simpleErc721.strm"))
