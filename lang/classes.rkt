@@ -104,10 +104,30 @@
     #:with code #'node.code)
   (pattern node:var-assignment
     #:with code #'node.code)
+  (pattern node:map-literal
+    #:with code #'node.code)
+  (pattern node:field-access
+    #:with code #'node.code)
   (pattern node:do-block
     #:with code #'node.code)
   (pattern node:ident
     #:with code #'node.value))
+
+(define-syntax-class (field-access)
+  #:attributes (code)
+  (pattern #s(field-access map:ident (val:string ...))
+    #:attr code #'(map-access map.value (list val ...))))
+
+(define-syntax-class (map-literal)
+  #:attributes (code)
+  (pattern #s(map-literal (kv:key-value ...))
+    #:attr code #'(hash (~@ (~@ kv.key kv.value) ...))))
+
+(define-syntax-class (key-value)
+  #:attributes (key value)
+  (pattern #s(key-value key*:ident value*:expression)
+    #:attr key #'key*.str-value
+    #:attr value #'value*.code))
 
 (define-syntax-class (var-assignment)
   #:attributes (code)
@@ -135,9 +155,10 @@
     #:with code #'(op* lh.code rh.code)))
 
 (define-syntax-class (ident)
-  #:attributes (value)
+  #:attributes (value str-value)
   (pattern node:string
-    #:with value (string->symbol (format "~a" (syntax->datum #'node)))))
+    #:with value (string->symbol (format "~a" (syntax->datum #'node)))
+    #:with str-value #'(format "~a" (syntax->datum #'node))))
 
 (define-syntax-class (primitive-type)
   #:attributes (value*)
