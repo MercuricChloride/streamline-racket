@@ -1,6 +1,7 @@
 #lang racket
 
 (require (for-template streamline/utils/macros
+                       streamline/lang/runtime-helpers
                        "./globals.rkt"
                        racket/base
                        racket/stxparam
@@ -47,15 +48,6 @@
   #:attributes (code)
   (pattern #s(instance-def name:expr abi:expr addr:expr)
     #:attr code #'(list name abi addr)))
-
-;; [(_ . node:function-like)
-;;  #:with name (string->symbol (syntax->datum #'node.name*))
-;;  #:with (args ...) (map (lambda (arg) (string->symbol (syntax->datum arg)))
-;;                         (syntax->list #'node.args*))
-;;  #:with (functor ...) #'node.body*
-;;  (syntax-local-introduce #'(define (name (~@ args ...))
-;;                              (define input (list (~@ args ...)))
-;;                              (~>> input (~@ functor ...))))]
 
 ;; Mfns, sfns, functions
 (define-syntax-class (function-like)
@@ -106,7 +98,7 @@
   #:attributes (code)
   (pattern #s(binary-op lh:expression op rh:expression)
     #:with op* (match (syntax-e #'op)
-                 ["+" #'+]
+                 ["+" #'add]
                  ["-" #'-]
                  ["*" #'*]
                  ["/" #'/]

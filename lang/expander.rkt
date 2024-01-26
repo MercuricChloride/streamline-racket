@@ -12,9 +12,6 @@
   (syntax-parse stx
     [(_ . node:top-level-expression) #'node.code]
     [(_ . v) #'(#%datum . v)]))
-;; [(_ . node:source-def) (syntax-local-introduce #'node.code)]
-;; [(_ . node:instance-def) (syntax-local-introduce #'node.code)]
-;; [(_ . node:function-like) (syntax-local-introduce #'node.code)]
 
 (define (streamline:read-syntax path input)
   (define ast (parser:parse-streamline! input))
