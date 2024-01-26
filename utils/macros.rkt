@@ -54,11 +54,11 @@
 (define-syntax (~>> stx)
   (syntax-parse stx
     #:literals (lambda)
-    [(_ value:expr (~or (lambda (arg:id ...) body) (hof-proc:expr hof-callback:expr)) ...)
+    [(_ value:expr (~or (lambda (arg ...) body) (hof-proc:expr hof-callback:expr)) ...)
      #'(let* ([val value]
               [~?
-               (~@ (val ((lambda (arg ...) body) val)) ...)
-               (~@ (val (hof-proc hof-callback val)) ...)])
+               (~@ [val ((lambda (arg ...) body) val)] ...)
+               (~@ [val (hof-proc hof-callback val)] ...)])
          val)]))
 
 ;(~>> 42 (lambda (arg) (* 2 arg)))
