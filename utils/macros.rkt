@@ -57,12 +57,11 @@
     [(_ value:expr (~or (lambda (arg ...) body) (hof-proc:expr hof-callback:expr)) ...)
      #'(let* ([val value]
               [~?
-               (~@ [val ((lambda (arg ...) body) val)] ...)
+               (~@ [val (apply (lambda (arg ...) body) (if (list? val) val (list val)))] ...)
                (~@ [val (hof-proc hof-callback val)] ...)])
          val)]))
 
-;(~>> 42 (lambda (arg) (* 2 arg)))
-;(~>> '(1 2 3) (map (lambda (num) (* 2 num))))
+;;(~>> '(1 2 3) (map (lambda (num) (* 2 num))))
 
 ;; clojure style threader macros
 (define-syntax (as~> stx)

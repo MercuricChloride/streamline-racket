@@ -65,17 +65,22 @@
     #:with (functor ...) #'body.code
     #:with (arg ...) #'(input.value ...)
     #:with code #'(define (name (~@ arg ...))
-                    (define inputs '(arg ...))
+                    (define inputs (list (~@ arg ...)))
                     (~>> inputs (~@ functor ...))))
-  ;; (pattern #s(sfn name:string (input:string ...) body:pipeline _)
-  ;;   #:with name* #'name
-  ;;   #:with body* (syntax-e #'body.chain*)
-  ;;   #:with args* #'(input ...))
-  ;; (pattern #s(fn name:string (input:string ...) body:pipeline _)
-  ;;   #:with name* #'name
-  ;;   #:with body* (syntax-e #'body.chain*)
-  ;;   #:with args* #'(input ...))
-  )
+  (pattern #s(sfn name*:string (input:ident ...) body:pipeline _)
+    #:with name (systring->symbol #'name*)
+    #:with (functor ...) #'body.code
+    #:with (arg ...) #'(input.value ...)
+    #:with code #'(define (name (~@ arg ...))
+                    (define inputs (list (~@ arg ...)))
+                    (~>> inputs (~@ functor ...))))
+  (pattern #s(fn name*:string (input:ident ...) body:pipeline _)
+    #:with name (systring->symbol #'name*)
+    #:with (functor ...) #'body.code
+    #:with (arg ...) #'(input.value ...)
+    #:with code #'(define (name (~@ arg ...))
+                    (define inputs (list (~@ arg ...)))
+                    (~>> inputs (~@ functor ...)))))
 
 (define-syntax-class (pipeline)
   #:attributes (code)
@@ -108,6 +113,7 @@
                  ["==" #'eq]
                  ["<" #'<]
                  [">" #'>])
+    #:do (print #'lh.code #'rh.code)
     #:with code #'(op* lh.code rh.code)))
 
 (define-syntax-class (ident)
