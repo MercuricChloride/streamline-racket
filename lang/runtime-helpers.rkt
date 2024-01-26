@@ -8,4 +8,5 @@
 (define (add lh rh)
   (cond
     [(string? lh) (format "~a~a" lh rh)]
-    [(number? lh) (+ lh (->number rh))]))
+    [(number? lh) (+ lh (->number rh))]
+    [(box? lh) (add (unbox lh) rh)]))

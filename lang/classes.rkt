@@ -52,27 +52,38 @@
 ;; Mfns, sfns, functions
 (define-syntax-class (function-like)
   #:attributes (code)
-  (pattern #s(mfn name*:string (input:ident ...) body:pipeline _)
+  (pattern #s(mfn name*:string (input:ident ...) body:pipeline (attribute:attribute ...))
     #:with name (systring->symbol #'name*)
     #:with (functor ...) #'body.code
     #:with (arg ...) #'(input.value ...)
+    #:with (var ...) #'(attribute.code ...)
     #:with code #'(define (name (~@ arg ...))
+                    (~@ var ...)
                     (define inputs (list (~@ arg ...)))
                     (~>> inputs (~@ functor ...))))
-  (pattern #s(sfn name*:string (input:ident ...) body:pipeline _)
+  (pattern #s(sfn name*:string (input:ident ...) body:pipeline (attribute:attribute ...))
     #:with name (systring->symbol #'name*)
     #:with (functor ...) #'body.code
     #:with (arg ...) #'(input.value ...)
+    #:with (var ...) #'(attribute.code ...)
     #:with code #'(define (name (~@ arg ...))
+                    (~@ var ...)
                     (define inputs (list (~@ arg ...)))
                     (~>> inputs (~@ functor ...))))
-  (pattern #s(fn name*:string (input:ident ...) body:pipeline _)
+  (pattern #s(fn name*:string (input:ident ...) body:pipeline (attribute:attribute ...))
     #:with name (systring->symbol #'name*)
     #:with (functor ...) #'body.code
     #:with (arg ...) #'(input.value ...)
+    #:with (var ...) #'(attribute.code ...)
     #:with code #'(define (name (~@ arg ...))
+                    (~@ var ...)
                     (define inputs (list (~@ arg ...)))
                     (~>> inputs (~@ functor ...)))))
+
+(define-syntax-class (attribute)
+  #:attributes (code)
+  (pattern #s(kv-attribute "var" key:ident value:expression)
+    #:with code #'(define key.value (box value.code))))
 
 (define-syntax-class (pipeline)
   #:attributes (code)
@@ -91,8 +102,23 @@
     #:with code #'node.value*)
   (pattern node:binary-op
     #:with code #'node.code)
+  (pattern node:var-assignment
+    #:with code #'node.code)
+  (pattern node:do-block
+    #:with code #'node.code)
   (pattern node:ident
     #:with code #'node.value))
+
+(define-syntax-class (var-assignment)
+  #:attributes (code)
+  (pattern #s(var-assignment key:ident value:expression)
+    #:attr code #'(set-box! key.value value.code)))
+
+(define-syntax-class (do-block)
+  #:attributes (code)
+  (pattern #s(do-block (expr:expression ...))
+    #:attr code #'(begin
+                    expr.code ...)))
 
 (define-syntax-class (binary-op)
   #:attributes (code)
