@@ -1,40 +1,42 @@
-#lang racket
+#lang racket/base
 
-(require (for-template streamline/utils/macros
-                       streamline/lang/runtime-helpers
-                       "./globals.rkt"
-                       racket/base
-                       racket/stxparam
-                       racket/stxparam-exptime)
-         syntax/parse
-         racket/stxparam)
+;;(for-template streamline/utils/macros streamline/lang/runtime-helpers)
+(require streamline/lang/runtime-helpers
+         racket/match
+         (for-template "./globals.rkt")
+         streamline/utils/macros
+         (prefix-in parser: streamline/lang/parser)
+         syntax/parse)
 
-(provide source-def
-         instance-def
-         function-like
-         primitive-type
-         pipeline
-         functor
-         expression
-         top-level-expression
-         systring->symbol)
+(provide transform)
 
-;; (define-syntax-parameter string->ident? #f)
+;; (define-syntax (systring->symbol item)
+;;   (string->symbol (syntax->datum item)))
 
-;; (define-syntax-rule (with-ident-string body ...)
-;;   (syntax-parameterize ([string->ident? #t])
-;;     body ...))
+(define (transform stx)
+  (syntax-parse stx
+    [node:top-level-expression #'node.code]))
 
-(define-syntax-rule (systring->symbol item) (string->symbol (syntax->datum item)))
+(define-syntax-class (repl-interaction)
+  #:attributes (code)
+  (pattern node:expression
+    #:attr code (syntax node.code))
+  ;; (pattern node:source-def
+  ;;   #:attr code (syntax-local-introduce #'node.code))
+  ;; (pattern node:instance-def
+  ;;   #:attr code (syntax-local-introduce #'node.code))
+  ;; (pattern node:function-like
+  ;;   #:attr code (syntax-local-introduce #'node.code))
+  )
 
 (define-syntax-class (top-level-expression)
   #:attributes (code)
   (pattern node:source-def
-    #:attr code (syntax-local-introduce #'node.code))
+    #:attr code #'node.code)
   (pattern node:instance-def
-    #:attr code (syntax-local-introduce #'node.code))
+    #:attr code #'node.code)
   (pattern node:function-like
-    #:attr code (syntax-local-introduce #'node.code)))
+    #:attr code #'node.code))
 
 (define-syntax-class (source-def)
   #:attributes (value code)
@@ -51,34 +53,35 @@
 
 ;; Mfns, sfns, functions
 (define-syntax-class (function-like)
+  #:literals (~>>)
   #:attributes (code)
-  (pattern #s(mfn name*:string (input:ident ...) body:pipeline (attribute:attribute ...))
-    #:with name (systring->symbol #'name*)
+  (pattern #s(mfn name*:ident (input:ident ...) body:pipeline (attribute:attribute ...))
+    #:with name #'name*.value
     #:with (functor ...) #'body.code
     #:with (arg ...) #'(input.value ...)
     #:with (var ...) #'(attribute.code ...)
-    #:with code #'(define (name (~@ arg ...))
+    #:with code #'(define (name arg ...)
                     (~@ var ...)
-                    (define inputs (list (~@ arg ...)))
-                    (~>> inputs (~@ functor ...))))
-  (pattern #s(sfn name*:string (input:ident ...) body:pipeline (attribute:attribute ...))
-    #:with name (systring->symbol #'name*)
+                    (define inputs (list arg ...))
+                    (~>> inputs functor ...)))
+  (pattern #s(sfn name*:ident (input:ident ...) body:pipeline (attribute:attribute ...))
+    #:with name #'name*.value
     #:with (functor ...) #'body.code
     #:with (arg ...) #'(input.value ...)
     #:with (var ...) #'(attribute.code ...)
-    #:with code #'(define (name (~@ arg ...))
+    #:with code #'(define (name arg ...)
                     (~@ var ...)
-                    (define inputs (list (~@ arg ...)))
-                    (~>> inputs (~@ functor ...))))
-  (pattern #s(fn name*:string (input:ident ...) body:pipeline (attribute:attribute ...))
-    #:with name (systring->symbol #'name*)
-    #:with (functor ...) #'body.code
-    #:with (arg ...) #'(input.value ...)
-    #:with (var ...) #'(attribute.code ...)
-    #:with code #'(define (name (~@ arg ...))
-                    (~@ var ...)
-                    (define inputs (list (~@ arg ...)))
-                    (~>> inputs (~@ functor ...)))))
+                    (define inputs (list arg ...))
+                    (~>> inputs functor ...)))
+  (pattern #s(fn name*:ident (input:ident ...) body:pipeline (attribute:attribute ...))
+    #:with name #'name*.value
+    #:with (functor ...) (syntax body.code)
+    #:with (arg ...) (syntax (input.value ...))
+    #:with (var ...) (syntax (attribute.code ...))
+    #:with code #'(define (name arg ...)
+                          (~@ var ...)
+                          (define inputs (list arg ...))
+                          (~>> inputs functor ...))))
 
 (define-syntax-class (attribute)
   #:attributes (code)
@@ -94,40 +97,37 @@
   #:attributes (code)
   (pattern #s(lam (arg*:ident ...) body:expression)
     #:with (arg ...) #'(arg*.value ...)
-    #:attr code #'(lambda (arg ...) body.code)))
+    #:attr code (syntax (lambda (arg ...) body.code)))
+
+  (pattern #s(hof hof-kind:ident #s(lam (arg*:ident ...) body:expression))
+    #:with hof (syntax hof-kind.value)
+    #:with (arg ...) (syntax (arg*.value ...))
+    #:attr code (syntax (hof (lambda (arg ...) body.code)))))
 
 (define-syntax-class (expression)
   #:attributes (code)
   (pattern node:primitive-type
-    #:with code #'node.value*)
+    #:with code (syntax node.value))
+  (pattern node:compound-type
+    #:with code (syntax node.code))
   (pattern node:binary-op
     #:with code #'node.code)
   (pattern node:var-assignment
     #:with code #'node.code)
-  (pattern node:map-literal
-    #:with code #'node.code)
+
   (pattern node:field-access
     #:with code #'node.code)
   (pattern node:do-block
     #:with code #'node.code)
+  (pattern node:function-call
+    #:with code #'node.code)
   (pattern node:ident
     #:with code #'node.value))
 
-(define-syntax-class (field-access)
+(define-syntax-class (function-call)
   #:attributes (code)
-  (pattern #s(field-access map:ident (val:string ...))
-    #:attr code #'(map-access map.value (list val ...))))
-
-(define-syntax-class (map-literal)
-  #:attributes (code)
-  (pattern #s(map-literal (kv:key-value ...))
-    #:attr code #'(hash (~@ (~@ kv.key kv.value) ...))))
-
-(define-syntax-class (key-value)
-  #:attributes (key value)
-  (pattern #s(key-value key*:ident value*:expression)
-    #:attr key #'key*.str-value
-    #:attr value #'value*.code))
+  (pattern #s(function-call name:ident (arg:expression ...))
+    #:attr code #'(name.value arg.code ...)))
 
 (define-syntax-class (var-assignment)
   #:attributes (code)
@@ -151,25 +151,40 @@
                  ["==" #'eq]
                  ["<" #'<]
                  [">" #'>])
-    #:do (print #'lh.code #'rh.code)
+    ;;#:do (print #'lh.code #'rh.code)
     #:with code #'(op* lh.code rh.code)))
 
 (define-syntax-class (ident)
   #:attributes (value str-value)
   (pattern node:string
     #:with value (string->symbol (format "~a" (syntax->datum #'node)))
-    #:with str-value #'(format "~a" (syntax->datum #'node))))
+    #:with str-value (format "~a" (syntax->datum #'node))))
+
+(define-syntax-class (field-access)
+  #:attributes (code)
+  (pattern #s(field-access map:ident (val:string ...))
+    #:attr code #'(map-access map.value (list val ...))))
+
+(define-syntax-class (key-value)
+  #:attributes (key value)
+  (pattern #s(key-value key*:ident value*:expression)
+    #:attr key #'key*.str-value
+    #:attr value #'value*.code))
+
+(define-syntax-class (compound-type)
+  #:attributes (code)
+  (pattern #s(map-literal (kv:key-value ...))
+    #:attr code #'(hash (~@ (~@ kv.key kv.value) ...)))
+  (pattern #s(list-literal (val:expression ...))
+    #:attr code (syntax (list val.code ...)))
+  (pattern #s(tuple-literal (val:expression ...))
+    #:attr code (syntax (list val.code ...))))
 
 (define-syntax-class (primitive-type)
-  #:attributes (value*)
-  (pattern #s(number-literal val)
-    #:with value* #'val)
-  (pattern #s(string-literal val)
-    #:with value* #'val)
+  #:attributes (value)
+  (pattern #s(number-literal val:number)
+    #:with value #'val)
+  (pattern #s(string-literal val:string)
+    #:with value #'val)
   (pattern #s(boolean-literal val:expr)
-    #:with value* #'val)
-  ;; TODO Maybe add a sequence type?
-  (pattern #s(list-literal val:expr)
-    #:with value* #'val)
-  (pattern #s(tuple-literal val:expr)
-    #:with value* #'val))
+    #:with value #'val))

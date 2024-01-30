@@ -43,13 +43,6 @@
               [output (string-replace output find (format "~a\n~a" replace find) #:all? true)] ...)
          output)]))
 
-(begin-for-syntax
-  (define-syntax-class (callback)
-    #:attributes (input* procedure*)
-    (pattern (value:expr proc:expr callback:expr)
-      #:with procedure* #'(proc callback value)
-      #:with input* #'value)))
-
 ;; clojure style thread-last macros
 (define-syntax (~>> stx)
   (syntax-parse stx
@@ -57,8 +50,9 @@
     [(_ value:expr (~or (lambda (arg ...) body) (hof-proc:expr hof-callback:expr)) ...)
      #'(let* ([val value]
               [~?
-               (~@ [val (apply (lambda (arg ...) body) (if (list? val) val (list val)))] ...)
-               (~@ [val (hof-proc hof-callback val)] ...)])
+               (~@ [val (hof-proc hof-callback val)] ...)
+               (~@ [val (if (list? val) (apply (lambda (arg ...) body) val)
+                            ((lambda (arg ...) body) val))] ...)])
          val)]))
 
 ;;(~>> '(1 2 3) (map (lambda (num) (* 2 num))))
@@ -68,6 +62,12 @@
   (syntax-parse stx
     [(_ ident:id initial-value:expr expression:expr ...)
      #'(let* ([ident initial-value] [~@ (ident expression)] ...) ident)]))
+
+(as~> inline 420
+      (* 2 inline)
+      (list inline)
+      (map number? inline)
+      ((lambda)))
 
 ;; a small wrapper over string join.
 ;; Will take the last expression given and string join it with the seperator

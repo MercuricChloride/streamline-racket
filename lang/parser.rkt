@@ -557,6 +557,9 @@
       [edges <- (declared-edges)]
       (pure (list cells modules edges))))
 
+(define streamline-interactions/p
+  (do [interaction <- (syntax/p (or/p expression/p))] (pure interaction)))
+
 (define (module-input->yaml input)
   (define kind (car input))
   (define name (cdr input))
@@ -627,7 +630,13 @@
   (define tokenized-input (tokenize input-port))
   (hash-ref (parse-file! tokenized-input) "parsed-file"))
 
+;; Used in the repl
+(define (parse-streamline-interaction! input-port)
+  (define tokenized-input (tokenize input-port))
+  (parse-result! (parse-tokens streamline-interactions/p tokenized-input)))
+
 (provide parse-streamline!
+         parse-streamline-interaction!
          parse-file!
          ;;primitive-value
          identifier
