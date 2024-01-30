@@ -52,6 +52,7 @@
                (~? (~@ [val (apply (lambda (arg ...) body) val)] ...) (~@ [val (hof-proc hof-callback val)] ...)))
          val)]))
 
+;; EXAMPLE
 ;;(~>> '(1 2 3) (map (lambda (num) (* 2 num))))
 
 ;; clojure style threader macros
@@ -60,6 +61,7 @@
     [(_ ident:id initial-value:expr expression:expr ...)
      #'(let* ([ident initial-value] [~@ (ident expression)] ...) ident)]))
 
+;; EXAMPLE
 ;; (as~> inline 420
 ;;       (* 2 inline)
 ;;       (list inline)

@@ -63,8 +63,14 @@
     #:with (var ...) #'(attribute.code ...)
     #:with code #'(define (name arg ...)
                     (~@ var ...)
-                    (as~> output-value (list arg ...)
-                                functor ...)))
+                    (define inputs (list arg ...))
+                    (define initial-value
+                      (if (and (= 1 (length inputs)) ; if the length of the inputs are one,
+                               (list? (car inputs))) ; and the car of the inputs is a list,
+                          (car inputs) ; we will make the initial value the first input
+                          inputs ; otherwise we will keep it as a list of the inputs
+                          ))
+                    (as~> output-value (list arg ...) functor ...)))
   (pattern #s(sfn name*:ident (input:ident ...) body:pipeline (attribute:attribute ...))
     #:with name #'name*.value
     #:with (functor ...) #'body.code
@@ -72,17 +78,29 @@
     #:with (var ...) #'(attribute.code ...)
     #:with code #'(define (name arg ...)
                     (~@ var ...)
-                    (as~> output-value (list arg ...)
-                                functor ...)))
+                    (define inputs (list arg ...))
+                    (define initial-value
+                      (if (and (= 1 (length inputs)) ; if the length of the inputs are one,
+                               (list? (car inputs))) ; and the car of the inputs is a list,
+                          (car inputs) ; we will make the initial value the first input
+                          inputs ; otherwise we will keep it as a list of the inputs
+                          ))
+                    (as~> output-value initial-value functor ...)))
   (pattern #s(fn name*:ident (input:ident ...) body:pipeline (attribute:attribute ...))
     #:with name #'name*.value
     #:with (functor ...) (syntax body.code)
     #:with (arg ...) (syntax (input.value ...))
     #:with (var ...) (syntax (attribute.code ...))
     #:with code #'(define (name arg ...)
-                          (~@ var ...)
-                          (as~> output-value (list arg ...)
-                                functor ...))))
+                    (~@ var ...)
+                    (define inputs (list arg ...))
+                    (define initial-value
+                      (if (and (= 1 (length inputs)) ; if the length of the inputs are one,
+                               (list? (car inputs))) ; and the car of the inputs is a list,
+                          (car inputs) ; we will make the initial value the first input
+                          inputs ; otherwise we will keep it as a list of the inputs
+                          ))
+                    (as~> output-value initial-value functor ...))))
 
 (define-syntax-class (attribute)
   #:attributes (code)
@@ -153,7 +171,6 @@
                  ["==" #'eq]
                  ["<" #'<]
                  [">" #'>])
-    ;;#:do (print #'lh.code #'rh.code)
     #:with code #'(op* lh.code rh.code)))
 
 (define-syntax-class (ident)
