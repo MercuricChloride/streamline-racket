@@ -54,6 +54,7 @@
 ;; Mfns, sfns, functions
 (define-syntax-class (function-like)
   #:literals (~>>)
+  #:datum-literals (output-value)
   #:attributes (code)
   (pattern #s(mfn name*:ident (input:ident ...) body:pipeline (attribute:attribute ...))
     #:with name #'name*.value
@@ -62,8 +63,8 @@
     #:with (var ...) #'(attribute.code ...)
     #:with code #'(define (name arg ...)
                     (~@ var ...)
-                    (define inputs (list arg ...))
-                    (~>> inputs functor ...)))
+                    (as~> output-value (list arg ...)
+                                functor ...)))
   (pattern #s(sfn name*:ident (input:ident ...) body:pipeline (attribute:attribute ...))
     #:with name #'name*.value
     #:with (functor ...) #'body.code
@@ -71,8 +72,8 @@
     #:with (var ...) #'(attribute.code ...)
     #:with code #'(define (name arg ...)
                     (~@ var ...)
-                    (define inputs (list arg ...))
-                    (~>> inputs functor ...)))
+                    (as~> output-value (list arg ...)
+                                functor ...)))
   (pattern #s(fn name*:ident (input:ident ...) body:pipeline (attribute:attribute ...))
     #:with name #'name*.value
     #:with (functor ...) (syntax body.code)
@@ -80,8 +81,8 @@
     #:with (var ...) (syntax (attribute.code ...))
     #:with code #'(define (name arg ...)
                           (~@ var ...)
-                          (define inputs (list arg ...))
-                          (~>> inputs functor ...))))
+                          (as~> output-value (list arg ...)
+                                functor ...))))
 
 (define-syntax-class (attribute)
   #:attributes (code)
@@ -94,15 +95,16 @@
     #:with code #'(functors.code ...)))
 
 (define-syntax-class (functor)
+  #:datum-literals (output-value)
   #:attributes (code)
   (pattern #s(lam (arg*:ident ...) body:expression)
     #:with (arg ...) #'(arg*.value ...)
-    #:attr code (syntax (lambda (arg ...) body.code)))
+    #:attr code #'(apply (lambda (arg ...) body.code) output-value))
 
   (pattern #s(hof hof-kind:ident #s(lam (arg*:ident ...) body:expression))
     #:with hof (syntax hof-kind.value)
     #:with (arg ...) (syntax (arg*.value ...))
-    #:attr code (syntax (hof (lambda (arg ...) body.code)))))
+    #:attr code #'(hof (lambda (arg ...) body.code) output-value)))
 
 (define-syntax-class (expression)
   #:attributes (code)

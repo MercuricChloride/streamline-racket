@@ -47,12 +47,9 @@
 (define-syntax (~>> stx)
   (syntax-parse stx
     #:literals (lambda)
-    [(_ value:expr (~or (lambda (arg ...) body) (hof-proc:expr hof-callback:expr)) ...)
+    [(_ value (~or (lambda (arg ...) body) (hof-proc:expr hof-callback:expr)) ...)
      #'(let* ([val value]
-              [~?
-               (~@ [val (hof-proc hof-callback val)] ...)
-               (~@ [val (if (list? val) (apply (lambda (arg ...) body) val)
-                            ((lambda (arg ...) body) val))] ...)])
+               (~? (~@ [val (apply (lambda (arg ...) body) val)] ...) (~@ [val (hof-proc hof-callback val)] ...)))
          val)]))
 
 ;;(~>> '(1 2 3) (map (lambda (num) (* 2 num))))
@@ -63,11 +60,11 @@
     [(_ ident:id initial-value:expr expression:expr ...)
      #'(let* ([ident initial-value] [~@ (ident expression)] ...) ident)]))
 
-(as~> inline 420
-      (* 2 inline)
-      (list inline)
-      (map number? inline)
-      ((lambda)))
+;; (as~> inline 420
+;;       (* 2 inline)
+;;       (list inline)
+;;       (map number? inline)
+;;       ((lambda) inline))
 
 ;; a small wrapper over string join.
 ;; Will take the last expression given and string join it with the seperator
