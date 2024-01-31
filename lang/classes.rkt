@@ -53,7 +53,7 @@
 
 ;; Mfns, sfns, functions
 (define-syntax-class (function-like)
-  #:literals (~>>)
+  #:literals (~>> hash-set!)
   #:datum-literals (output-value)
   #:attributes (code)
   (pattern #s(mfn name*:ident (input:ident ...) body:pipeline (attribute:attribute ...))
@@ -61,31 +61,35 @@
     #:with (functor ...) #'body.code
     #:with (arg ...) #'(input.value ...)
     #:with (var ...) #'(attribute.code ...)
-    #:with code #'(define (name arg ...)
-                    (~@ var ...)
-                    (define inputs (list arg ...))
-                    (define initial-value
-                      (if (and (= 1 (length inputs)) ; if the length of the inputs are one,
-                               (list? (car inputs))) ; and the car of the inputs is a list,
-                          (car inputs) ; we will make the initial value the first input
-                          inputs ; otherwise we will keep it as a list of the inputs
-                          ))
-                    (as~> output-value (list arg ...) functor ...)))
+    #:with code #'(begin
+                    (hash-set! (module-dependencies) (quote name) (list (quote arg) ...))
+                    (define (name arg ...)
+                      (~@ var ...)
+                      (define inputs (list arg ...))
+                      (define initial-value
+                        (if (and (= 1 (length inputs)) ; if the length of the inputs are one,
+                                 (list? (car inputs))) ; and the car of the inputs is a list,
+                            (car inputs) ; we will make the initial value the first input
+                            inputs ; otherwise we will keep it as a list of the inputs
+                            ))
+                      (as~> output-value (list arg ...) functor ...))))
   (pattern #s(sfn name*:ident (input:ident ...) body:pipeline (attribute:attribute ...))
     #:with name #'name*.value
     #:with (functor ...) #'body.code
     #:with (arg ...) #'(input.value ...)
     #:with (var ...) #'(attribute.code ...)
-    #:with code #'(define (name arg ...)
-                    (~@ var ...)
-                    (define inputs (list arg ...))
-                    (define initial-value
-                      (if (and (= 1 (length inputs)) ; if the length of the inputs are one,
-                               (list? (car inputs))) ; and the car of the inputs is a list,
-                          (car inputs) ; we will make the initial value the first input
-                          inputs ; otherwise we will keep it as a list of the inputs
-                          ))
-                    (as~> output-value initial-value functor ...)))
+    #:with code #'(begin
+                    (hash-set! (module-dependencies) (quote name) (list (quote arg) ...))
+                    (define (name arg ...)
+                      (~@ var ...)
+                      (define inputs (list arg ...))
+                      (define initial-value
+                        (if (and (= 1 (length inputs)) ; if the length of the inputs are one,
+                                 (list? (car inputs))) ; and the car of the inputs is a list,
+                            (car inputs) ; we will make the initial value the first input
+                            inputs ; otherwise we will keep it as a list of the inputs
+                            ))
+                      (as~> output-value initial-value functor ...))))
   (pattern #s(fn name*:ident (input:ident ...) body:pipeline (attribute:attribute ...))
     #:with name #'name*.value
     #:with (functor ...) (syntax body.code)

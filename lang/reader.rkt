@@ -2,6 +2,7 @@
 
 (require streamline/lang/classes
          (prefix-in parser: streamline/lang/parser)
+         streamline/lang/runtime-helpers
          syntax/strip-context)
 
 (provide (rename-out (streamline:read-syntax read-syntax)
