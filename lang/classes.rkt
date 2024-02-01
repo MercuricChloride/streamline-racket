@@ -25,14 +25,13 @@
 (define-syntax-class (repl-interaction)
   #:attributes (code)
   (pattern node:expression
-    #:attr code (syntax node.code))
-  ;; (pattern node:source-def
-  ;;   #:attr code (syntax-local-introduce #'node.code))
-  ;; (pattern node:instance-def
-  ;;   #:attr code (syntax-local-introduce #'node.code))
-  ;; (pattern node:function-like
-  ;;   #:attr code (syntax-local-introduce #'node.code))
-  )
+    #:attr code #'node.code)
+  (pattern node:function-like
+    #:attr code #'node.code)
+  (pattern node:source-def
+    #:attr code #'node.code)
+  (pattern node:instance-def
+    #:attr code #'node.code))
 
 (define-syntax-class (top-level-expression)
   #:attributes (code)

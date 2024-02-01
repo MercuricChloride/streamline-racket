@@ -561,7 +561,7 @@
       (pure (list cells modules edges))))
 
 (define streamline-interactions/p
-  (do [interaction <- (syntax/p (or/p expression/p))] (pure interaction)))
+  (do [interactions <- (syntax/p (many/p (or/p expression/p module-def/p)))] (pure interactions)))
 
 (define (module-input->yaml input)
   (define kind (car input))

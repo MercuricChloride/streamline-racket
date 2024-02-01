@@ -41,8 +41,9 @@
 (defmodule (baz something) something)
 (defmodule (something BLOCK) "sdflkjasdlkfjasldkfj")
 (defmodule (hey-jordan BLOCK) "Hey Jordan")
+(defmodule (hey-jj BLOCK) (hash-ref BLOCK "previous-block"))
 (defmodule (zap BLOCK) (* 123 (hash-ref BLOCK "timestamp")))
-(defmodule (foo bar baz zap hey-jordan) (hash "bar" bar "baz" baz "zap" zap "epic" hey-jordan))
+(defmodule (foo bar baz zap hey-jordan hey-jj) (hash "bar" bar "baz" baz "zap" zap "epic" hey-jordan "jj" hey-jj))
 
-(exec-block (hash "number" 1337 "timestamp" 420)
-  "foo")
+;; (exec-block (hash "number" 1337 "timestamp" 420 "previous-block" 1336)
+;;   "foo")
