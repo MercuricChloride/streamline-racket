@@ -92,6 +92,9 @@
 
 (struct sfn-delta-edge (name) #:prefab)
 
+(define semi/p (do (guard/p (token/p 'SEMI) (lambda (_) #t)
+                            "Expected a ';', please go back and add one!")))
+
 ;; EXPRESSIONS
 (define true/p (do (token/p 'TRUE) (pure (boolean-literal #t))))
 (define false/p (do (token/p 'FALSE) (pure (boolean-literal #f))))
@@ -137,7 +140,7 @@
 (define do-block/p
   (do (token/p 'DO)
       (token/p 'LCURLY)
-      (exprs <- (many+/p (lazy/p expression/p) #:sep (token/p 'SEMI)))
+      (exprs <- (many+/p (lazy/p expression/p) #:sep semi/p))
       (token/p 'RCURLY)
       (pure (do-block exprs))))
 
@@ -270,7 +273,7 @@
 
 (define filter/p (do (token/p 'FILTER) [callback <- lambda/p] (pure (hof "filter" callback))))
 
-(define functor/p (do (token/p 'PIPE) [f <- (or/p map/p filter/p lambda/p)] (token/p 'SEMI) (pure f)))
+(define functor/p (do (token/p 'PIPE) [f <- (or/p map/p filter/p lambda/p)] semi/p (pure f)))
 
 (define pipeline/p (do [applications <- (many/p functor/p #:min 1)] (pure (pipeline applications))))
 
@@ -538,7 +541,7 @@
 (define source-def/p
   (do (token/p 'SOURCE)
       (path <- (syntax/p (token/p 'STRING)))
-      (token/p 'SEMI)
+      semi/p
       (pure (source-def path))))
 
 (define instance-def/p
@@ -548,7 +551,7 @@
       (token/p 'LPAREN)
       (address <- (syntax/p (token/p 'ADDRESS)))
       (token/p 'RPAREN)
-      (token/p 'SEMI)
+      semi/p
       (pure (instance-def name abi-type address))))
 
 (define streamline/p

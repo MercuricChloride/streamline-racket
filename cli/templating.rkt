@@ -210,7 +210,7 @@ fn {{name}}({{module-inputs}}) -> SolidityType {
 (def-template
  (lam/gen fn-args exprs)
  (args (w-sep "," fn-args) arg-types (fmt-args fn-args))
- "let output_map = (|({{args}}): ({{arg-types}})| -> SolidityType { {{exprs}} })(output_map);")
+ "let output_map = (|({{args}}): ({{arg-types}})| -> SolidityType { { {{exprs}} }.into() })(output_map);")
 
 (def-template
  (hof/gen kind fn-args exprs)
@@ -312,8 +312,8 @@ macro_rules! {{name}} {
     [(number-literal value) (sol-type "Uint" value)]
     [(boolean-literal value) (sol-type "Boolean" (if value "1" "0"))]
     [(address-literal value) (sol-type "Address" value)]
-    [(tuple-literal vals) (tuple-lit vals)]
-    [(list-literal vals) (list-lit vals)]
+    [(tuple-literal vals) (gen tuple-lit vals)]
+    [(list-literal vals) (gen list-lit vals)]
     [(mfn name inputs body attributes) (w-attributes attributes (gen mfn/gen name inputs body))]
     [(sfn name inputs body attributes) (w-attributes attributes (gen sfn/gen name inputs body))]
     [(fn name inputs body attributes) (w-attributes attributes (gen fn/gen name inputs body))]
@@ -445,4 +445,4 @@ fn EVENTS(blk: eth::Block) -> Option<prost_wkt_types::Struct> {
 (provide generate-streamline-file
          streamline-path)
 
-(generate-streamline-file "examples/simpleErc721.strm")
+(generate-streamline-file "../examples/simpleErc721.strm")

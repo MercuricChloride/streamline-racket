@@ -1,11 +1,8 @@
 #lang racket/base
 
-(require (for-syntax racket/base syntax/parse)
-         racket/pretty)
+(require (for-syntax racket/base syntax/parse))
 
-(provide import-list
-         instance-list
-         module-dependencies)
+(provide (all-defined-out))
 
 ;;; Global Params
 (define import-list (make-parameter '()))
@@ -41,9 +38,11 @@
     (eval-block module-name)))
 
 (defmodule (bar BLOCK) (* 10 (hash-ref BLOCK "number")))
-(defmodule (baz BLOCK) (* 10 (hash-ref BLOCK "timestamp")))
-(defmodule (zap BLOCK) (* 10 (hash-ref BLOCK "timestamp")))
-(defmodule (foo bar baz zap) (hash "bar" bar "baz" baz "zap" zap))
+(defmodule (baz something) something)
+(defmodule (something BLOCK) "sdflkjasdlkfjasldkfj")
+(defmodule (hey-jordan BLOCK) "Hey Jordan")
+(defmodule (zap BLOCK) (* 123 (hash-ref BLOCK "timestamp")))
+(defmodule (foo bar baz zap hey-jordan) (hash "bar" bar "baz" baz "zap" zap "epic" hey-jordan))
 
-(parameterize ([block-value (hash "number" 420 "timestamp" 69)])
-  (eval-block "foo"))
+(exec-block (hash "number" 1337 "timestamp" 420)
+  "foo")

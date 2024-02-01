@@ -8,7 +8,8 @@
          (prefix-in parser: streamline/lang/parser)
          syntax/parse)
 
-(provide transform)
+(provide transform
+         transform-interaction)
 
 ;; (define-syntax (systring->symbol item)
 ;;   (string->symbol (syntax->datum item)))
@@ -16,6 +17,10 @@
 (define (transform stx)
   (syntax-parse stx
     [node:top-level-expression #'node.code]))
+
+(define (transform-interaction stx)
+  (syntax-parse stx
+    [node:repl-interaction #'node.code]))
 
 (define-syntax-class (repl-interaction)
   #:attributes (code)

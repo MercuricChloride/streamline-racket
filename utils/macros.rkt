@@ -27,10 +27,10 @@
   (syntax-parse stx
     [(_ (name param ...) str:expr)
      #'(define (name (~@ param) ...)
-         (template str (~@ param) ...))]
+         (template str param ...))]
     [(_ (name param ...) ((~seq namev:id remap:expr) ...) str:expr)
-     #'(define (name (~@ param) ...)
-         (let* ([~? (namev remap)] ...) (template str (~@ param) ... (~@ namev) ...)))]))
+     #'(define (name param ...)
+         (let* ([~? (namev remap)] ...) (template str param ... namev ...)))]))
 
 ;; Thread Replace
 ;; Allows us to easily define replacements
@@ -72,7 +72,7 @@
 ;; Will take the last expression given and string join it with the seperator
 (define-syntax (w-sep stx)
   (syntax-parse stx
-    [(_ sep:expr expression:expr ...+)
+    [(_ sep:expr expression:expr ...)
      #'(string-join (begin
                       expression ...)
                     sep)]
