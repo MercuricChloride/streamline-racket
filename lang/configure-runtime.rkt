@@ -51,14 +51,11 @@
 
 (define (configure-runtime!)
   (current-read-interaction (λ (_src in)
-                              (read-multiline-input ">    " "..    ")
-                              ;; (print in)
-                              ;; (cond
-                              ;;   [(readline-input? in) (handle-readline-input in)]
-                              ;;   [(drracket-input? in) (handle-drracket-input in)]
-                              ;;   [(terminal-input? in) (handle-terminal-input in)]
-                              ;;   [else eof])
-                              )))
+                              (cond
+                                [(readline-input? in) (read-multiline-input ">    " "..    ")]
+                                [(terminal-input? in) (read-multiline-input ">    " "..    ")]
+                                [(drracket-input? in) (handle-drracket-input in)]
+                                [else eof]))))
 
 (define (streamline:read-interaction input)
   (define interaction (parser:parse-streamline-interaction! input))
